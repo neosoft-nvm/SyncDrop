@@ -9,6 +9,7 @@ import {
   CONFLICT_POLICIES,
   OPERATIONS,
   type BackendId,
+  type ConfigFile,
   type Config,
   type ConflictPolicy,
   type Operation,
@@ -110,11 +111,14 @@ export async function loadConfig(file: string = configFilePath()): Promise<Confi
   return result.value;
 }
 
-/** Write the default config. Refuses to overwrite unless `force`. */
-export async function writeDefaultConfig(file: string = configFilePath(), force = false): Promise<void> {
+/** Write the default config, or one "main" target at `syncFolder`. Refuses to overwrite unless `force`. */
+export async function writeDefaultConfig(file: string = configFilePath(), force = false, syncFolder?: string): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
+  const config: ConfigFile = syncFolder
+    ? { ...DEFAULT_CONFIG, targets: { main: { name: "Main Sync", path: syncFolder, backend: "syncthing" } } }
+    : DEFAULT_CONFIG;
   try {
-    await writeFile(file, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n", { flag: force ? "w" : "wx" });
+    await writeFile(file, JSON.stringify(config, null, 2) + "\n", { flag: force ? "w" : "wx" });
   } catch (e) {
     if (isErrno(e, "EEXIST")) throw new ConfigError(`${file} already exists (use --force to overwrite)`);
     throw e;

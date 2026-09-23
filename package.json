@@ -19,10 +19,13 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "test": "vitest run",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "build:binary": "node scripts/build-binary.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   }

@@ -113,4 +113,59 @@ describe("cli", () => {
     expect(await run(["config", "init"], fakeIO().io)).toBe(0);
     expect(await run(["config", "init"], fakeIO().io)).toBe(3);
   });
+
+  it("config init prompts for the sync folder and creates it", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const folder = path.join(root, "Synced");
+    const c = fakeIO({ interactive: true, answers: [folder, "y"] });
+    expect(await run(["config", "init"], c.io)).toBe(0);
+    const cfg = JSON.parse(await read(process.env.SYNCDROP_CONFIG));
+    expect(Object.keys(cfg.targets)).toEqual(["main"]);
+    expect(cfg.targets.main.path).toBe(folder);
+    expect((await tree(folder)).length).toBe(0);
+  });
+
+  it("config init --path works without a terminal and warns if missing", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const c = fakeIO();
+    expect(await run(["config", "init", "--path", path.join(root, "Nope")], c.io)).toBe(0);
+    expect(c.err.join("\n")).toContain("does not exist");
+    expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets.main.path).toBe(path.join(root, "Nope"));
+  });
+
+  it("config init without a terminal or --path keeps the default targets", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    expect(await run(["config", "init"], fakeIO().io)).toBe(0);
+    expect(Object.keys(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets)).toHaveLength(3);
+  });
+  it("setup creates the config from --path, installs menus into XDG dirs, and keeps an existing config", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    process.env.XDG_CONFIG_HOME = path.join(root, "xdg-config");
+    process.env.XDG_DATA_HOME = path.join(root, "xdg-data");
+    const folder = path.join(root, "Synced");
+    expect(await run(["setup", "--path", folder], fakeIO().io)).toBe(0);
+    expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets.main.path).toBe(folder);
+    const again = fakeIO();
+    expect(await run(["setup", "--path", path.join(root, "Other")], again.io)).toBe(0);
+    expect(again.out.join("\n")).toContain("Keeping your existing settings");
+    expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets.main.path).toBe(folder);
+  });
+
+  it("uninstall removes menu entries, keeps config unless --purge, never touches synced files", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    process.env.XDG_CONFIG_HOME = path.join(root, "xdg-config");
+    process.env.XDG_DATA_HOME = path.join(root, "xdg-data");
+    process.env.XDG_STATE_HOME = path.join(root, "xdg-state");
+    const folder = path.join(root, "Synced");
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, "keep.txt"), "x");
+    expect(await run(["setup", "--path", folder], fakeIO().io)).toBe(0);
+    expect(await run(["uninstall"], fakeIO().io)).toBe(0);
+    expect(await read(process.env.SYNCDROP_CONFIG)).toContain("main");
+    const c = fakeIO();
+    expect(await run(["uninstall", "--purge"], c.io)).toBe(0);
+    await expect(read(process.env.SYNCDROP_CONFIG)).rejects.toThrow();
+    expect(await read(path.join(folder, "keep.txt"))).toBe("x");
+    expect(await run(["uninstall"], fakeIO().io)).toBe(0); // idempotent
+  });
 });

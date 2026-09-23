@@ -1,0 +1,29 @@
+{
+  "name": "syncdrop",
+  "version": "0.1.0",
+  "description": "Cross-platform file-to-sync-target utility with file-manager integrations.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "syncdrop": "dist/cli/main.js"
+  },
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "config"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

@@ -113,4 +113,29 @@ describe("cli", () => {
     expect(await run(["config", "init"], fakeIO().io)).toBe(0);
     expect(await run(["config", "init"], fakeIO().io)).toBe(3);
   });
+
+  it("config init prompts for the sync folder and creates it", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const folder = path.join(root, "Synced");
+    const c = fakeIO({ interactive: true, answers: [folder, "y"] });
+    expect(await run(["config", "init"], c.io)).toBe(0);
+    const cfg = JSON.parse(await read(process.env.SYNCDROP_CONFIG));
+    expect(Object.keys(cfg.targets)).toEqual(["main"]);
+    expect(cfg.targets.main.path).toBe(folder);
+    expect((await tree(folder)).length).toBe(0);
+  });
+
+  it("config init --path works without a terminal and warns if missing", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const c = fakeIO();
+    expect(await run(["config", "init", "--path", path.join(root, "Nope")], c.io)).toBe(0);
+    expect(c.err.join("\n")).toContain("does not exist");
+    expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets.main.path).toBe(path.join(root, "Nope"));
+  });
+
+  it("config init without a terminal or --path keeps the default targets", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    expect(await run(["config", "init"], fakeIO().io)).toBe(0);
+    expect(Object.keys(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets)).toHaveLength(3);
+  });
 });

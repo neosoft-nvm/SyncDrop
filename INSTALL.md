@@ -1,6 +1,6 @@
 # SyncDrop Installation
 
-Requires **Node.js 22+**, **npm**, and **Syncthing** with one folder per SyncDrop target. SyncDrop only writes into those folders; Syncthing does the syncing. No step needs root except installing system packages.
+Requires **Node.js 22+**, **npm**, and **Syncthing** with one folder per SyncDrop target. SyncDrop only writes into those folders; Syncthing does the syncing. No step needs root except installing system packages (and `npm link` on some systems).
 
 > Menu integrations are implemented but not yet verified inside the real file managers. Windows Explorer integration is not available; the CLI works.
 
@@ -15,30 +15,38 @@ npm link             # puts `syncdrop` on PATH
 syncdrop --version
 ```
 
-If `npm link` needs root on your system, set a user prefix first: `npm config set prefix ~/.local`, and make sure `~/.local/bin` is on `PATH`. The file-manager entries call Node directly by absolute path, so they work even if `PATH` is minimal.
+If `npm link` fails with `EACCES` (common with a system-wide Node), either re-run it with `sudo npm link`, or set a user prefix first: `npm config set prefix ~/.local`, and make sure `~/.local/bin` is on `PATH`. The file-manager entries call Node directly by absolute path, so they work even if `PATH` is minimal.
 
-## 2. Configure targets (all OSes)
+## 2. Tell SyncDrop which folder to use (all OSes)
 
-```bash
-syncdrop config init      # writes the default config
-syncdrop config path      # shows where it is
-```
+SyncDrop copies your files into one folder, and Syncthing syncs that folder to your other devices. SyncDrop can't tell which folder Syncthing uses, so it asks you once.
 
-Edit that file. Each target's `path` must be an existing folder that Syncthing already syncs:
+1. **Find the folder in Syncthing.** Open Syncthing (usually <http://127.0.0.1:8384>) and note the path of a folder it already syncs. Or click **Add Folder**, choose a new one such as `~/SyncDrop`, and share it with your other devices.
 
-```json
-{
-  "version": 1,
-  "targets": {
-    "main": { "name": "Main Sync", "path": "~/SyncDrop", "backend": "syncthing" }
-  },
-  "defaults": { "operation": "copy", "target": "main", "conflict": "ask" }
-}
-```
+2. **Run the setup script and answer its questions:**
 
-Create the folders (`mkdir -p ~/SyncDrop`), then check with `syncdrop targets` (missing folders are flagged). After adding or renaming targets, re-run `syncdrop integrate install` for Thunar and Dolphin. Caja and Nautilus update themselves.
+   ```bash
+   syncdrop config init
+   ```
 
-Smoke test: `syncdrop add --target main --conflict keep-both ~/somefile.txt`
+   ```
+   SyncDrop copies files into a folder that Syncthing already syncs.
+   Path of that folder [~/SyncDrop]:
+   ```
+
+   Type the path from step 1 and press Enter. Press Enter alone to accept `~/SyncDrop`. If the folder doesn't exist yet, the script offers to create it.
+
+3. **Check it:**
+
+   ```bash
+   syncdrop targets
+   ```
+
+   You should see a `main` line with your path and no `(missing)`. If it says `(missing)`, run `syncdrop config init --force` and enter the correct path.
+
+Run this as your normal user, not with `sudo`. Under `sudo` the settings go to `/root` and your file manager will never see them.
+
+> **Good to know:** the script saves your answer in a small settings file (`syncdrop config path` shows where). You don't need to open it. Only open it later if you want to add a second sync folder as another target. After adding one, re-run `syncdrop integrate install` for Thunar and Dolphin. Caja and Nautilus update on their own. Scripts can skip the question with `syncdrop config init --path ~/SyncDrop`.
 
 ## 3. Fedora 44 MATE or Xfce
 
@@ -117,9 +125,20 @@ Explorer integration is not implemented yet. The CLI works:
    npm install
    npm link
    syncdrop config init
-   syncdrop config path
+   syncdrop targets
    ```
-3. Edit the config (per-user `%APPDATA%\syncdrop\config.json`) using absolute paths such as `C:\Users\you\SyncDrop`. Windows behavior is untested.
+3. When asked for the folder, enter an absolute path such as `C:\Users\you\SyncDrop`. The config is per-user at `%APPDATA%\syncdrop\config.json`. Windows behavior is untested.
+
+## Check that it works
+
+Copy a test file from a terminal:
+
+```bash
+echo hello > ~/test.txt
+syncdrop add --target main --conflict keep-both ~/test.txt
+```
+
+It should print `copied`, and `test.txt` should appear in your sync folder. Then right-click a file in your file manager and use the SyncDrop menu.
 
 ## Verify a Syncthing round trip
 

@@ -1,14 +1,15 @@
-import { stat } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
+import path from "node:path";
 import readline from "node:readline";
 import { loadConfig, writeDefaultConfig } from "../config/config.js";
 import { CONFLICT_POLICIES, OPERATIONS, type ConflictPolicy, type Operation } from "../config/types.js";
 import type { ConflictResolver } from "../core/conflicts.js";
-import { ConflictError, EXIT, SyncDropError, ArgsError, describeError, exitCodeFor } from "../core/errors.js";
+import { ConfigError, ConflictError, EXIT, SyncDropError, ArgsError, describeError, exitCodeFor } from "../core/errors.js";
 import { JsonlHistory } from "../core/history.js";
 import { SyncDrop, type OperationResult } from "../core/syncdrop.js";
 import { createLogger } from "../shared/logging.js";
 import { desktopNotify } from "../shared/notify.js";
-import { configFilePath, historyFilePath } from "../shared/paths.js";
+import { configFilePath, expandPath, historyFilePath } from "../shared/paths.js";
 import { getVersion } from "../shared/version.js";
 import { defaultCli } from "../platforms/common.js";
 import { ADAPTER_NAMES, createAdapter } from "../platforms/registry.js";
@@ -35,7 +36,8 @@ Commands:
       -c, --conflict <policy>   ask | overwrite | skip | keep-both
           --notify              Show a desktop notification when done
   config path                 Print the configuration file location
-  config init [--force]       Create a default configuration
+  config init [--path <dir>] [--force]
+                              Create a config; asks for the Syncthing folder on a terminal
   history [-n <count>] [--json]   Show recent operations
   integrate <install|uninstall|status> [thunar|caja|dolphin|nautilus|all]
                               Manage file-manager context-menu entries
@@ -54,7 +56,7 @@ interface Parsed {
   flags: Map<string, string | true>;
 }
 
-const VALUE_OPTS: Record<string, string> = { "--target": "target", "-t": "target", "--operation": "operation", "-o": "operation", "--conflict": "conflict", "-c": "conflict", "--limit": "limit", "-n": "limit" };
+const VALUE_OPTS: Record<string, string> = { "--target": "target", "-t": "target", "--operation": "operation", "-o": "operation", "--conflict": "conflict", "-c": "conflict", "--limit": "limit", "--path": "path", "-n": "limit" };
 const BOOL_OPTS: Record<string, string> = { "--help": "help", "-h": "help", "--version": "version", "-V": "version", "--verbose": "verbose", "-v": "verbose", "--json": "json", "--notify": "notify", "--force": "force" };
 
 export function parseArgs(argv: string[]): Parsed {
@@ -182,8 +184,41 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
     return EXIT.OK;
   }
   if (sub === "init") {
-    await writeDefaultConfig(configFilePath(), p.flags.has("force"));
-    io.out(`created ${configFilePath()}`);
+    const file = configFilePath();
+    let folder = p.flags.get("path");
+    if (folder === true) throw new ArgsError("--path needs a folder");
+    if (!folder && io.interactive) {
+      // Fail before prompting if the config exists and would not be overwritten.
+      if (!p.flags.has("force") && (await stat(file).then(() => true, () => false))) {
+        throw new ConfigError(`${file} already exists (use --force to overwrite)`);
+      }
+      io.out("SyncDrop copies files into a folder that Syncthing already syncs.");
+      folder = (await io.ask("Path of that folder [~/SyncDrop]: ")).trim() || "~/SyncDrop";
+    }
+    let created = false;
+    if (folder) {
+      const dir = expandPath(folder);
+      if (!path.isAbsolute(dir)) throw new ArgsError(`--path must be absolute or start with ~ (got '${folder}')`);
+      const info = await stat(dir).catch(() => undefined);
+      if (info && !info.isDirectory()) throw new ArgsError(`${dir} exists but is not a folder`);
+      if (!info) {
+        const yes = io.interactive ? /^y/i.test((await io.ask(`${dir} does not exist. Create it? [Y/n]: `)).trim() || "y") : false;
+        if (yes) {
+          await mkdir(dir, { recursive: true });
+          created = true;
+        } else {
+          io.err(`warning: ${dir} does not exist yet; create it before using SyncDrop`);
+        }
+      }
+    }
+    await writeDefaultConfig(file, p.flags.has("force"), folder || undefined);
+    io.out(`created ${file}`);
+    if (folder) {
+      io.out(`target 'main' -> ${folder}${created ? " (folder created)" : ""}`);
+      io.out("Make sure Syncthing shares this folder. Check with: syncdrop targets");
+    } else {
+      io.out("Edit the target paths so they match folders Syncthing syncs, then run: syncdrop targets");
+    }
     return EXIT.OK;
   }
   throw new ArgsError("config: expected 'path' or 'init'");

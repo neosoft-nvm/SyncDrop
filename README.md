@@ -4,7 +4,7 @@ A cross-platform file-to-sync-target utility with file-manager integrations.
 
 **Select → Right-click → SyncDrop → Target → File appears in your synchronized folder.**
 
-> **Status: v0.1.0.** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 64 automated tests. The file-manager menus have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
+> **Status: v0.1.0.** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 70 automated tests. The file-manager menus have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
 
 ## What it does
 
@@ -66,7 +66,8 @@ syncdrop add --target projects ./MyApp report.pdf  # copy items
 syncdrop add --target projects --operation move ./old
 syncdrop add --target main --conflict keep-both ./notes.txt
 syncdrop config path                               # print config location
-syncdrop config init                               # write a default config
+syncdrop config init                               # asks which folder Syncthing syncs
+syncdrop config init --path ~/SyncDrop            # same, without the prompt
 syncdrop history -n 10
 syncdrop integrate install all                     # add file-manager menu entries
 syncdrop integrate uninstall caja

@@ -9,10 +9,10 @@ into a directory that Syncthing already syncs.
 Do NOT describe it as "a Syncthing extension". Syncthing is only the first backend.
 
 ## Status
-v0.1.0 built: core, CLI, and Thunar/Caja/Dolphin/Nautilus install generators. 67 automated tests pass.
+v0.1.0 built: core, CLI, and Thunar/Caja/Dolphin/Nautilus install generators. 70 automated tests pass.
 Verified: core, CLI, generated file syntax (python, XML). NOT verified in a real file manager
 (Thunar/Caja/Dolphin/Nautilus menus) or across two Syncthing machines. Keep marking these untested.
-Extras beyond spec: `--notify`, `config init`, `integrate` command, `cli/main.ts` entry, JSONL history.
+Extras beyond spec: `--notify`, `config init` (prompts for the sync folder; `--path` skips the prompt), `integrate` command, `cli/main.ts` entry, JSONL history.
 
 ## Stack
 - TypeScript on current LTS Node.js (declare in `package.json` `engines`), npm

@@ -16,6 +16,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Tag must match package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          [ "${GITHUB_REF_NAME#v}" = "$(node -p "require('./package.json').version")" ] || { echo "tag $GITHUB_REF_NAME does not match package.json version" >&2; exit 1; }
       - run: npm ci
       - run: npm test
       - run: |

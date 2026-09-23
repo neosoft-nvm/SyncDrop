@@ -37,7 +37,7 @@ Commands:
   config path                 Print the configuration file location
   config init [--force]       Create a default configuration
   history [-n <count>] [--json]   Show recent operations
-  integrate <install|uninstall|status> [thunar|dolphin|nautilus|all]
+  integrate <install|uninstall|status> [thunar|caja|dolphin|nautilus|all]
                               Manage file-manager context-menu entries
 
 Global options:

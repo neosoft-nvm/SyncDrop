@@ -9,9 +9,9 @@ into a directory that Syncthing already syncs.
 Do NOT describe it as "a Syncthing extension". Syncthing is only the first backend.
 
 ## Status
-v0.1.0 built: core, CLI, and Thunar/Dolphin/Nautilus install generators. 64 automated tests pass.
+v0.1.0 built: core, CLI, and Thunar/Caja/Dolphin/Nautilus install generators. 67 automated tests pass.
 Verified: core, CLI, generated file syntax (python, XML). NOT verified in a real file manager
-(Thunar/Dolphin/Nautilus menus) or across two Syncthing machines. Keep marking these untested.
+(Thunar/Caja/Dolphin/Nautilus menus) or across two Syncthing machines. Keep marking these untested.
 Extras beyond spec: `--notify`, `config init`, `integrate` command, `cli/main.ts` entry, JSONL history.
 
 ## Stack
@@ -32,7 +32,7 @@ File-manager adapter → CLI → Core engine → Backend → (Syncthing sees fil
 
 ## Layout
 `src/cli` · `src/config` · `src/core` (syncdrop, copy, move, validation, conflicts,
-history, errors) · `src/backends` · `src/platforms/{linux/{thunar,dolphin,nautilus},windows/explorer}`
+history, errors) · `src/backends` · `src/platforms/{linux/{thunar,caja,dolphin,nautilus},windows/explorer}`
 · `src/shared` (paths, logging, result) · `config/default.json` · `tests/{unit,integration,fixtures}`
 · `packaging/{linux,windows}` · `assets/icons`
 
@@ -70,12 +70,13 @@ Exit codes: 0 ok · 1 operation failure · 2 bad args · 3 config error · 4 con
 ## Adapters (build in this order)
 1. Thunar — custom actions (`uca.xml`). Start with one "Add to SyncDrop" action; keep room for a dynamic submenu.
 2. Dolphin — KDE Service Menu `.desktop`, per-user, calls the CLI.
-3. Nautilus — supported extension mechanism, calls the CLI.
+3. Nautilus — nautilus-python extension, calls the CLI.
+3b. Caja — python-caja extension (shares its generator with Nautilus). Added at the user's request, although the spec excluded it for 0.1.
 4. Windows Explorer — after Linux MVP; reuse the same core.
 Pass absolute paths. One adapter failing must not affect the others. Do not invent APIs.
 
 ## Test targets
-Fedora 44 MATE (Thunar, dev, dual-boots Win11) · Fedora 44 Xfce (Thunar) ·
+Fedora 44 MATE (Caja and Thunar, dev, dual-boots Win11) · Fedora 44 Xfce (Thunar) ·
 Zorin OS 18 Pro GNOME (Nautilus and Dolphin). Syncthing test folder: `~/SyncDropTest`.
 Required core tests: single file, single dir, multiple files, multiple dirs, mixed,
 existing file, existing dir, source inside destination, missing source, invalid target,

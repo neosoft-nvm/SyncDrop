@@ -4,7 +4,7 @@ A cross-platform file-to-sync-target utility with file-manager integrations.
 
 **Select → Right-click → SyncDrop → Target → File appears in your synchronized folder.**
 
-> **Status: v0.1.0.** The core engine, CLI and Thunar/Dolphin/Nautilus integrations are implemented and the core is covered by 64 automated tests. The file-manager menus have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
+> **Status: v0.1.0.** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 64 automated tests. The file-manager menus have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
 
 ## What it does
 
@@ -28,13 +28,14 @@ File manager adapter → SyncDrop CLI → Core engine → Backend → Syncthing 
 |---|---|
 | CLI and core engine | Implemented, tested |
 | Thunar (Xfce/MATE) | Implemented, menu untested in Thunar |
+| Caja (MATE default) | Implemented, menu untested in Caja |
 | Dolphin (KDE) | Implemented, untested (no Dolphin available yet) |
 | Nautilus (GNOME Files) | Implemented, menu untested in Nautilus |
 | GUI, Windows Explorer, packaging | Not started |
 
 Target platforms: Fedora 44 (MATE, Xfce), Zorin OS 18 Pro (GNOME), then Windows 11.
 
-Menus: Nautilus and Dolphin show a **SyncDrop** submenu with one entry per target. Thunar cannot nest custom actions, so it shows one **SyncDrop: <target>** entry per target. File-manager actions use `--conflict keep-both` (nothing is overwritten) and show a desktop notification.
+Menus: Caja, Nautilus and Dolphin show a **SyncDrop** submenu with one entry per target. Thunar cannot nest custom actions, so it shows one **SyncDrop: <target>** entry per target. File-manager actions use `--conflict keep-both` (nothing is overwritten) and show a desktop notification.
 
 ## Configuration
 
@@ -68,7 +69,7 @@ syncdrop config path                               # print config location
 syncdrop config init                               # write a default config
 syncdrop history -n 10
 syncdrop integrate install all                     # add file-manager menu entries
-syncdrop integrate uninstall thunar
+syncdrop integrate uninstall caja
 syncdrop --verbose add --target main ./file.txt    # debug logging
 ```
 
@@ -104,7 +105,7 @@ See [INSTALL.md](INSTALL.md).
 
 ## Roadmap
 
-`0.1` CLI/core + Linux integrations (current, pending real-world testing) → `0.2` Thunar → `0.3` Dolphin → `0.4` Nautilus → `0.5` GUI → `0.6` Windows → `1.0` stable. Versioning follows SemVer.
+`0.1` CLI/core + Linux integrations incl. Caja (current, pending real-world testing) → `0.2` Thunar → `0.3` Dolphin → `0.4` Nautilus → `0.5` GUI → `0.6` Windows → `1.0` stable. Versioning follows SemVer.
 
 ## Not in 0.1
 

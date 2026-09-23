@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildServiceMenu, DolphinAdapter } from "../../src/platforms/linux/dolphin/dolphin.js";
 import { buildExtension, NautilusAdapter } from "../../src/platforms/linux/nautilus/nautilus.js";
+import { buildExtension as buildCaja, CajaAdapter } from "../../src/platforms/linux/caja/caja.js";
 import { buildActions, mergeUca, ThunarAdapter } from "../../src/platforms/linux/thunar/thunar.js";
 import type { AdapterContext } from "../../src/platforms/types.js";
 import { cleanupTmp, tmpDir, write } from "../helpers.js";
@@ -90,6 +91,29 @@ describe("nautilus", () => {
   it("installs and uninstalls the extension file", async () => {
     const a = new NautilusAdapter(ctx);
     const { files } = await a.install();
+    expect(await readFile(files[0] as string, "utf8")).toContain("SyncDropExtension");
+    await a.uninstall();
+    await expect(stat(files[0] as string)).rejects.toThrow();
+  });
+});
+
+describe("caja", () => {
+  it("generates a python-caja extension using the Caja API", () => {
+    const py = buildCaja(ctx);
+    expect(py).toContain('gi.require_version("Caja", "2.0")');
+    expect(py).toContain("from gi.repository import GObject, Caja");
+    expect(py).toContain("Caja.MenuProvider");
+    expect(py).not.toContain("Nautilus");
+  });
+  it("nautilus keeps its 4.0 -> 3.0 fallback", () => {
+    const py = buildExtension(ctx);
+    expect(py).toContain('gi.require_version("Nautilus", "4.0")');
+    expect(py).toContain('gi.require_version("Nautilus", "3.0")');
+  });
+  it("installs to caja-python/extensions and uninstalls", async () => {
+    const a = new CajaAdapter(ctx);
+    const { files } = await a.install();
+    expect(files[0]).toContain(path.join("caja-python", "extensions", "syncdrop.py"));
     expect(await readFile(files[0] as string, "utf8")).toContain("SyncDropExtension");
     await a.uninstall();
     await expect(stat(files[0] as string)).rejects.toThrow();

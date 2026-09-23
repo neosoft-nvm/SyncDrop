@@ -21,7 +21,7 @@ export interface AdapterContext {
  * They contain no copy/move/business logic.
  */
 export interface FileManagerAdapter {
-  readonly name: "thunar" | "dolphin" | "nautilus";
+  readonly name: "thunar" | "dolphin" | "nautilus" | "caja";
   isSupported(): Promise<boolean>;
   install(): Promise<AdapterReport>;
   uninstall(): Promise<AdapterReport>;

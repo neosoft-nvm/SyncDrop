@@ -36,11 +36,30 @@ Edit that file. Each target's `path` must be an existing folder that Syncthing a
 }
 ```
 
-Create the folders (`mkdir -p ~/SyncDrop`), then check with `syncdrop targets` (missing folders are flagged). After adding or renaming targets, re-run `syncdrop integrate install` for Thunar and Dolphin. Nautilus updates itself.
+Create the folders (`mkdir -p ~/SyncDrop`), then check with `syncdrop targets` (missing folders are flagged). After adding or renaming targets, re-run `syncdrop integrate install` for Thunar and Dolphin. Caja and Nautilus update themselves.
 
 Smoke test: `syncdrop add --target main --conflict keep-both ~/somefile.txt`
 
-## 3. Fedora 44 (MATE or Xfce) with Thunar
+## 3. Fedora 44 MATE or Xfce
+
+Pick the file manager you use. Both can be installed side by side.
+
+### 3a. MATE with Caja (MATE default)
+
+```bash
+sudo dnf install nodejs npm syncthing python3-caja libnotify
+```
+
+Then steps 1 and 2, and:
+
+```bash
+syncdrop integrate install caja
+caja -q              # restart Caja
+```
+
+Right-click a file or folder and choose **SyncDrop**, then a target. The extension is `~/.local/share/caja-python/extensions/syncdrop.py`. Targets are read when the menu opens, so new targets need no reinstall. On Debian/Ubuntu-based MATE the package is also `python3-caja`.
+
+### 3b. Xfce (default) or MATE with Thunar
 
 ```bash
 sudo dnf install nodejs npm syncthing thunar libnotify
@@ -53,7 +72,7 @@ syncdrop integrate install thunar
 thunar -q            # restart Thunar
 ```
 
-Right-click a file or folder and choose **SyncDrop: <target>**. Entries are stored in `~/.config/Thunar/uca.xml` (your other custom actions are kept; a backup is saved as `uca.xml.syncdrop.bak`). MATE users: install `thunar` and use it in place of Caja.
+Right-click a file or folder and choose **SyncDrop: <target>**. Entries are stored in `~/.config/Thunar/uca.xml` (your other custom actions are kept; a backup is saved as `uca.xml.syncdrop.bak`).
 
 ## 4. Zorin OS 18 Pro, Nautilus (GNOME Files)
 
@@ -82,7 +101,7 @@ Then steps 1 and 2, and:
 syncdrop integrate install dolphin
 ```
 
-Restart Dolphin. Right-click a file or folder and look for **SyncDrop** (it may be under **Actions** or **Services**). The file is `~/.local/share/kio/servicemenus/syncdrop.desktop`. Nautilus and Dolphin integrations are independent; install either or both.
+Restart Dolphin. Right-click a file or folder and look for **SyncDrop** (it may be under **Actions** or **Services**). The file is `~/.local/share/kio/servicemenus/syncdrop.desktop`. All integrations are independent; install any combination.
 
 Install all detected file managers at once with `syncdrop integrate install all`. Check with `syncdrop integrate status`.
 
@@ -121,6 +140,6 @@ Your config (`syncdrop config path`) and history (`~/.local/state/syncdrop/`) ar
 
 - `syncdrop: command not found`: re-run `npm link` and check your npm global bin is on `PATH`.
 - Exit code `3`: config problem. The message says what to fix. Exit code `4`: a file already exists; pass `--conflict overwrite|skip|keep-both`.
-- Menu entry missing: restart the file manager; for Nautilus confirm `python3-nautilus` is installed.
+- Menu entry missing: restart the file manager; for Caja/Nautilus confirm `python3-caja` / `python3-nautilus` is installed.
 - No notification: install `libnotify` / `libnotify-bin` (provides `notify-send`).
 - Use `syncdrop --verbose add ...` for debug output, `syncdrop history` for past results.

@@ -5,7 +5,7 @@ Details behind [INSTALL.md](INSTALL.md): how the installer works, building from 
 ## Verification status
 
 - Verified: core engine, CLI, `syncdrop setup`, the standalone binary (built and run), `install.sh` in a scratch `$HOME`, generated file syntax (Python, XML). 72 automated tests pass.
-- **Not verified:** the release workflow (never run, so the `curl` URL 404s until a tag is pushed), the menus inside real Thunar/Caja/Dolphin/Nautilus, two-machine Syncthing sync, the interactive `curl | sh` prompt path on a real terminal, Windows.
+- **Not verified:** the menus inside real Thunar/Caja/Dolphin/Nautilus, two-machine Syncthing sync, the interactive `curl | sh` prompt path on a real terminal, Windows.
 
 ## How the installer works
 
@@ -47,7 +47,11 @@ SYNCDROP_BINARY=release/syncdrop sh packaging/linux/install.sh
 
 ## Publishing a release
 
-Push a tag such as `v0.1.0`. `.github/workflows/release.yml` runs the tests, builds the binary with Node 24.18.0 from nodejs.org, and attaches `syncdrop-linux-x64.gz` and `install.sh` to a GitHub release.
+Push a tag such as `v0.1.0`. `.github/workflows/release.yml` runs the tests, builds the binary with Node 24.18.0 from nodejs.org, and attaches `syncdrop-linux-x64.gz` and `install.sh` to a GitHub release. v0.1.0 was published this way; the workflow ran successfully on GitHub's runner and the `curl` one-liner was checked against the public release in a throwaway HOME.
+
+To release: bump `version` in `package.json` (the only place the version lives; the binary embeds it), merge to `main`, then `git tag -a vX.Y.Z -m "SyncDrop X.Y.Z" main && git push origin vX.Y.Z`. The workflow fails if the tag and `package.json` disagree.
+
+Dry run without publishing: `gh workflow run release --ref <branch>` (or Actions > release > Run workflow). It runs the tests, builds the binary and uploads it as the `syncdrop-linux-x64` artifact. Manual dispatch only works once `release.yml` exists on `main`.
 
 ## Configuration
 

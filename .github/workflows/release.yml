@@ -1,0 +1,29 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+env:
+  # The SEA base must be the official Node binary (distro builds are thin launchers).
+  NODE_VERSION: "24.18.0"
+jobs:
+  linux-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+      - run: npm test
+      - run: |
+          curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" | tar xJ
+          node scripts/build-binary.mjs --node "node-v${NODE_VERSION}-linux-x64/bin/node"
+          release/syncdrop --version
+          gzip -9 -k release/syncdrop
+          mv release/syncdrop.gz release/syncdrop-linux-x64.gz
+          cp packaging/linux/install.sh release/install.sh
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/syncdrop-linux-x64.gz release/install.sh --generate-notes

@@ -1,10 +1,15 @@
 import type { SyncTarget } from "../config/types.js";
 
-/** How file-manager entries invoke SyncDrop: `<node> <script> <args...>`. */
+/**
+ * How file-manager entries invoke SyncDrop: `<node> <script> <args...>`,
+ * or just `<node> <args...>` when `node` is the self-contained syncdrop binary (no script).
+ */
 export interface CliInvocation {
   node: string;
-  script: string;
+  script?: string;
 }
+
+export const cliArgv = (cli: CliInvocation): string[] => (cli.script ? [cli.node, cli.script] : [cli.node]);
 
 export interface AdapterReport {
   files: string[];

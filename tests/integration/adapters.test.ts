@@ -27,6 +27,17 @@ afterEach(() => {
   process.env = { ...saved };
 });
 
+describe("standalone binary (no script)", () => {
+  const bin: AdapterContext = { ...ctx, cli: { node: "/home/u/.local/bin/syncdrop" } };
+
+  it("invokes the binary directly in every adapter", () => {
+    expect(buildActions(bin)).toContain("&quot;/home/u/.local/bin/syncdrop&quot; add --target main");
+    expect(buildServiceMenu(bin)).toContain(`Exec="/home/u/.local/bin/syncdrop" "add" "--target" "main"`);
+    expect(buildExtension(bin)).toContain('SYNCDROP_CMD = ["/home/u/.local/bin/syncdrop"]');
+    expect(buildCaja(bin)).toContain('SYNCDROP_CMD = ["/home/u/.local/bin/syncdrop"]');
+  });
+});
+
 describe("thunar", () => {
   it("builds one escaped action per target passing %F", () => {
     const xml = buildActions(ctx);

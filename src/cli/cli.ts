@@ -1,5 +1,6 @@
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { isSea } from "node:sea";
 import readline from "node:readline";
 import { loadConfig, writeDefaultConfig } from "../config/config.js";
 import { CONFLICT_POLICIES, OPERATIONS, type ConflictPolicy, type Operation } from "../config/types.js";
@@ -39,6 +40,9 @@ Commands:
   config init [--path <dir>] [--force]
                               Create a config; asks for the Syncthing folder on a terminal
   history [-n <count>] [--json]   Show recent operations
+  setup [--path <dir>]        Guided first-time setup: sync folder + menu entries for every file manager found
+  uninstall [--purge]         Remove the menu entries and the syncdrop program; --purge also deletes config and history
+                              (your synced files are never touched)
   integrate <install|uninstall|status> [thunar|caja|dolphin|nautilus|all]
                               Manage file-manager context-menu entries
 
@@ -57,7 +61,7 @@ interface Parsed {
 }
 
 const VALUE_OPTS: Record<string, string> = { "--target": "target", "-t": "target", "--operation": "operation", "-o": "operation", "--conflict": "conflict", "-c": "conflict", "--limit": "limit", "--path": "path", "-n": "limit" };
-const BOOL_OPTS: Record<string, string> = { "--help": "help", "-h": "help", "--version": "version", "-V": "version", "--verbose": "verbose", "-v": "verbose", "--json": "json", "--notify": "notify", "--force": "force" };
+const BOOL_OPTS: Record<string, string> = { "--help": "help", "-h": "help", "--version": "version", "-V": "version", "--verbose": "verbose", "-v": "verbose", "--json": "json", "--notify": "notify", "--force": "force", "--purge": "purge" };
 
 export function parseArgs(argv: string[]): Parsed {
   const positionals: string[] = [];
@@ -274,6 +278,89 @@ async function cmdIntegrate(p: Parsed, io: CliIO): Promise<number> {
   return code;
 }
 
+async function cmdSetup(p: Parsed, io: CliIO): Promise<number> {
+  const file = configFilePath();
+  io.out("SyncDrop setup");
+  if (await stat(file).then(() => true, () => false)) {
+    io.out(`Keeping your existing settings (${file}).`);
+  } else {
+    const code = await cmdConfig({ positionals: ["config", "init"], flags: p.flags }, io);
+    if (code !== EXIT.OK) return code;
+  }
+  io.out("");
+  const config = await loadConfig();
+  const ctx = { cli: defaultCli(), targets: Object.values(config.targets) };
+  let installed = 0;
+  let code: number = EXIT.OK;
+  for (const name of ADAPTER_NAMES) {
+    const adapter = createAdapter(name, ctx);
+    if (!(await adapter.isSupported())) continue;
+    try {
+      const report = await adapter.install();
+      installed++;
+      io.out(`Added the SyncDrop menu to ${name}.`);
+      report.notes.forEach((n) => io.out(`  ${n}`));
+    } catch (e) {
+      io.err(`${name}: ${describeError(e)}`);
+      code = EXIT.FAILURE;
+    }
+  }
+  if (installed === 0 && code === EXIT.OK) {
+    io.out("No supported file manager found (Thunar, Caja, Dolphin, Nautilus). The command line still works: syncdrop add FILE...");
+  } else if (installed > 0) {
+    io.out("");
+    io.out("Almost done: restart your file manager (or log out and back in), then right-click a file and choose SyncDrop.");
+  }
+  if (isSea()) {
+    const dir = path.dirname(process.execPath);
+    if (!(process.env.PATH ?? "").split(path.delimiter).includes(dir)) {
+      io.out(`Note: ${dir} is not on your PATH, so typing 'syncdrop' in a terminal won't work until you log out and back in. The right-click menu is not affected.`);
+    }
+  }
+  return code;
+}
+
+async function cmdUninstall(p: Parsed, io: CliIO): Promise<number> {
+  let code: number = EXIT.OK;
+  // Menu entries first: they are removed by this binary. Config is not needed, so a broken one can't block this.
+  for (const name of ADAPTER_NAMES) {
+    try {
+      const report = await createAdapter(name, { cli: defaultCli(), targets: [] }).uninstall();
+      if (report.files.length > 0) io.out(`Removed the SyncDrop menu from ${name}.`);
+    } catch (e) {
+      io.err(`${name}: ${describeError(e)}`);
+      code = EXIT.FAILURE; // one adapter failing must not stop the others
+    }
+  }
+  if (isSea()) {
+    try {
+      await rm(process.execPath, { force: true });
+      io.out(`Removed ${process.execPath}`);
+    } catch (e) {
+      io.err(`could not remove ${process.execPath}: ${describeError(e)}`);
+      code = EXIT.FAILURE;
+    }
+  } else {
+    io.out("Not running the installed program, so nothing to delete there (remove it with your package manager or by hand).");
+  }
+  if (p.flags.has("purge")) {
+    for (const file of [configFilePath(), historyFilePath()]) {
+      try {
+        await rm(file, { force: true });
+        io.out(`Removed ${file}`);
+        await rmdir(path.dirname(file)).catch(() => undefined); // only if now empty
+      } catch (e) {
+        io.err(`could not remove ${file}: ${describeError(e)}`);
+        code = EXIT.FAILURE;
+      }
+    }
+  } else {
+    io.out(`Kept your settings and history (add --purge to delete them): ${configFilePath()}`);
+  }
+  io.out("Restart your file manager (or log out and back in) so the menu entries disappear. Synced files were not touched.");
+  return code;
+}
+
 /** Run the CLI and return the process exit code. */
 export async function run(argv: string[], io: CliIO): Promise<number> {
   try {
@@ -300,6 +387,10 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
         return await cmdConfig(p, io);
       case "history":
         return await cmdHistory(p, io);
+      case "setup":
+        return await cmdSetup(p, io);
+      case "uninstall":
+        return await cmdUninstall(p, io);
       case "integrate":
         return await cmdIntegrate(p, io);
       default:

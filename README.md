@@ -65,12 +65,14 @@ syncdrop targets                                   # list targets
 syncdrop add --target projects ./MyApp report.pdf  # copy items
 syncdrop add --target projects --operation move ./old
 syncdrop add --target main --conflict keep-both ./notes.txt
+syncdrop setup                                     # guided first-time setup (folder + menus)
 syncdrop config path                               # print config location
 syncdrop config init                               # asks which folder Syncthing syncs
 syncdrop config init --path ~/SyncDrop            # same, without the prompt
 syncdrop history -n 10
 syncdrop integrate install all                     # add file-manager menu entries
 syncdrop integrate uninstall caja
+syncdrop uninstall [--purge]                       # remove menus + program (--purge: also config/history)
 syncdrop --verbose add --target main ./file.txt    # debug logging
 ```
 
@@ -90,7 +92,7 @@ Exit codes: `0` success · `1` operation failed · `2` invalid arguments · `3` 
 
 ## Development
 
-Requires Node.js 22 or newer and npm.
+Requires Node.js 22 or newer and npm (end users do not: the installer ships a standalone binary). See [TECHSUPP.md](TECHSUPP.md#build-from-source).
 
 ```bash
 npm install

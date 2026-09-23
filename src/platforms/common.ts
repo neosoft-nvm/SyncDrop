@@ -1,9 +1,12 @@
+import { isSea } from "node:sea";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import type { CliInvocation } from "./types.js";
 
 export function defaultCli(): CliInvocation {
+  // Packaged binary: the executable is SyncDrop itself; there is no separate script.
+  if (isSea()) return { node: process.execPath };
   return {
     node: process.execPath,
     script: fileURLToPath(new URL("../cli/main.js", import.meta.url)),

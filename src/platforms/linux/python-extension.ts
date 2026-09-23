@@ -1,4 +1,4 @@
-import type { AdapterContext } from "../types.js";
+import { cliArgv, type AdapterContext } from "../types.js";
 
 export interface PythonExtensionOptions {
   /** GI namespace: "Nautilus" or "Caja". */
@@ -15,7 +15,7 @@ export interface PythonExtensionOptions {
  * so new targets appear without reinstalling.
  */
 export function buildPythonExtension(ctx: AdapterContext, o: PythonExtensionOptions): string {
-  const cmd = JSON.stringify([ctx.cli.node, ctx.cli.script]);
+  const cmd = JSON.stringify(cliArgv(ctx.cli));
   const [first, second] = o.versions;
   const requireVersion = second
     ? `try:

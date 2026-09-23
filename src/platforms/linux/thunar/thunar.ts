@@ -3,7 +3,7 @@ import path from "node:path";
 import { isErrno } from "../../../core/errors.js";
 import { which } from "../../../shared/paths.js";
 import { xdgConfigHome } from "../../common.js";
-import { addArgs, type AdapterContext, type AdapterReport, type FileManagerAdapter } from "../../types.js";
+import { addArgs, cliArgv, type AdapterContext, type AdapterReport, type FileManagerAdapter } from "../../types.js";
 
 const ID_PREFIX = "syncdrop-";
 const ACTION_RE = /[ \t]*<action>[\s\S]*?<\/action>[ \t]*\r?\n?/g;
@@ -16,7 +16,7 @@ const shellQuote = (s: string) => `"${s.replace(/(["\\$`])/g, "\\$1")}"`;
 export function buildActions(ctx: AdapterContext): string {
   return ctx.targets
     .map((t) => {
-      const command = [shellQuote(ctx.cli.node), shellQuote(ctx.cli.script), ...addArgs(t.id), "%F"].join(" ");
+      const command = [...cliArgv(ctx.cli).map(shellQuote), ...addArgs(t.id), "%F"].join(" ");
       return [
         "<action>",
         "\t<icon>folder-remote</icon>",

@@ -2,7 +2,7 @@ import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { which } from "../../../shared/paths.js";
 import { xdgDataHome } from "../../common.js";
-import { addArgs, type AdapterContext, type AdapterReport, type FileManagerAdapter } from "../../types.js";
+import { addArgs, cliArgv, type AdapterContext, type AdapterReport, type FileManagerAdapter } from "../../types.js";
 
 /** Quote one Exec argument per the Desktop Entry spec (quoting, then string escaping). */
 const execArg = (s: string) => `"${s.replace(/(["`$\\])/g, "\\$1")}"`.replace(/\\/g, "\\\\");
@@ -24,7 +24,7 @@ export function buildServiceMenu(ctx: AdapterContext): string {
     "",
   ];
   ctx.targets.forEach((t, i) => {
-    const exec = [execArg(ctx.cli.node), execArg(ctx.cli.script), ...addArgs(t.id).map(execArg), "%F"].join(" ");
+    const exec = [...cliArgv(ctx.cli).map(execArg), ...addArgs(t.id).map(execArg), "%F"].join(" ");
     lines.push(`[Desktop Action ${keys[i]}]`, `Name=${t.name.replace(/[\r\n]/g, " ")}`, "Icon=folder-sync", `Exec=${exec}`, "");
   });
   return lines.join("\n");

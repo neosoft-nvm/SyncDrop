@@ -9,10 +9,10 @@ into a directory that Syncthing already syncs.
 Do NOT describe it as "a Syncthing extension". Syncthing is only the first backend.
 
 ## Status
-v0.1.0 built: core, CLI, and Thunar/Caja/Dolphin/Nautilus install generators. 70 automated tests pass.
+v0.1.0 built: core, CLI, and Thunar/Caja/Dolphin/Nautilus install generators. 73 automated tests pass.
 Verified: core, CLI, generated file syntax (python, XML). NOT verified in a real file manager
 (Thunar/Caja/Dolphin/Nautilus menus) or across two Syncthing machines. Keep marking these untested.
-Extras beyond spec: `--notify`, `config init` (prompts for the sync folder; `--path` skips the prompt), `integrate` command, `cli/main.ts` entry, JSONL history.
+Install: single-file Node SEA binary (`scripts/build-binary.mjs`) + `packaging/linux/install.sh` + `syncdrop setup`; release workflow in `.github/workflows/release.yml` NOT yet run. Extras beyond spec: `--notify`, `setup`, `config init` (prompts for the sync folder; `--path` skips the prompt), `integrate` command, `uninstall [--purge]`, `cli/main.ts` entry, JSONL history.
 
 ## Stack
 - TypeScript on current LTS Node.js (declare in `package.json` `engines`), npm
@@ -94,5 +94,5 @@ auto-merge, sync monitoring, Windows shell extension, macOS, mobile, updater, te
 - Inspect the repo before creating files. Don't replace working code without testing.
 - Add tests for non-trivial core logic. Run build and tests before declaring done.
 - Report failures accurately. Never claim untested features work.
-- Update `README.md` and `INSTALL.md` whenever user-visible behavior or install steps change.
+- Update `README.md`, `INSTALL.md` (plain-language, end users) and `TECHSUPP.md` (technical) whenever user-visible behavior or install steps change.
 - Don't commit build artifacts. Use Git (`main`, `develop`, `feature/*`).

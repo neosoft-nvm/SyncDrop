@@ -130,7 +130,7 @@ describe("cli", () => {
     const [a, b, c2] = ["Videos", "Docs", "Docs2"].map((n) => path.join(root, n));
     const c = fakeIO({
       interactive: true,
-      answers: [a, "y", "Movies", "y", b, "Papers", "y", "y", c2, "Papers", "y", "n"],
+      answers: [a, "y", "Movies", "y", b, "y", "Papers", "y", c2, "y", "Papers", "n"],
     });
     expect(await run(["config", "init"], c.io)).toBe(0);
     const t = JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets;
@@ -141,11 +141,32 @@ describe("cli", () => {
 
   it("config init stops at 10 folders in total and points at the config file", async () => {
     process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
-    const answers = [path.join(root, "F0"), "y", "F0", ...Array.from({ length: 9 }, (_, i) => ["y", path.join(root, `F${i + 1}`), `F${i + 1}`, "y"]).flat()];
+    const answers = [path.join(root, "F0"), "y", "F0", ...Array.from({ length: 9 }, (_, i) => ["y", path.join(root, `F${i + 1}`), "y", `F${i + 1}`]).flat()];
     const c = fakeIO({ interactive: true, answers });
     expect(await run(["config", "init"], c.io)).toBe(0);
     expect(Object.keys(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets)).toHaveLength(10);
     expect(c.out.join("\n")).toContain("edit the SyncDrop config file");
+  });
+
+  it("config init re-asks on a bad folder instead of quitting", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const file = await write(path.join(root, "a-file"));
+    const good = path.join(root, "Good");
+    // relative path, a file, a typo the user refuses to create, then a good folder; name; no extras
+    const c = fakeIO({ interactive: true, answers: ["Documents", file, path.join(root, "typo"), "n", "n", good, "y", "", "n"] });
+    expect(await run(["config", "init"], c.io)).toBe(0);
+    expect(c.err.join("\n")).toContain("must be absolute");
+    expect(c.err.join("\n")).toContain("not a folder");
+    expect(c.err.join("\n")).toContain("try again");
+    expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets.main.path).toBe(good);
+  });
+
+  it("an extra folder can be abandoned with Enter, and a bad one is re-asked", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const main = path.join(root, "M");
+    const c = fakeIO({ interactive: true, answers: [main, "y", "", "y", "relative/dir", ""] });
+    expect(await run(["config", "init"], c.io)).toBe(0);
+    expect(Object.keys(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets)).toEqual(["main"]);
   });
 
   it("config init --path works without a terminal and warns if missing", async () => {

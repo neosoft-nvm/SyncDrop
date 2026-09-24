@@ -211,7 +211,6 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
         throw new ConfigError(`${file} already exists (use --force to overwrite)`);
       }
       io.out("SyncDrop copies files into a folder that Syncthing already syncs.");
-      folder = (await io.ask("Path of that Syncthing folder [~/SyncDrop]: ")).trim() || "~/SyncDrop";
     }
     // Validate (and offer to create) a folder; returns true if it was created.
     const prepare = async (raw: string): Promise<boolean> => {
@@ -225,11 +224,33 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
         await mkdir(dir, { recursive: true });
         return true;
       }
+      // Declined: most likely a typo, so on a terminal ask for the path again unless they really want it.
+      if (io.interactive && !/^y/i.test((await io.ask("Use that path anyway, without creating it? [y/N]: ")).trim())) {
+        throw new ArgsError(`no folder chosen for '${raw}'`);
+      }
       io.err(`warning: ${dir} does not exist yet; create it before using SyncDrop`);
       return false;
     };
+    // On a terminal a bad answer is explained and asked again; only scripted use (--path) fails.
+    const askFolder = async (question: string, fallback?: string): Promise<{ raw: string; created: boolean } | null> => {
+      for (;;) {
+        const raw = (await io.ask(question)).trim() || fallback;
+        if (!raw) return null; // Enter (or end of input) with no default: give up on this folder
+        try {
+          return { raw, created: await prepare(raw) };
+        } catch (e) {
+          io.err(`${describeError(e)}. Please try again (folder paths look like ~/Documents or /home/you/Documents).`);
+        }
+      }
+    };
     let created = false;
-    if (folder) created = await prepare(folder);
+    if (!folder && io.interactive) {
+      const first = await askFolder("Path of that Syncthing folder [~/SyncDrop]: ", "~/SyncDrop");
+      folder = first?.raw;
+      created = first?.created ?? false;
+    } else if (folder) {
+      created = await prepare(folder);
+    }
     let mainName = "Main Sync";
     const extras: Record<string, { name: string; path: string }> = {};
     if (folder && io.interactive && !p.flags.has("path")) {
@@ -239,10 +260,10 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
       const used = new Set<string>(["main"]);
       let more = /^y/i.test((await io.ask("Add more folders to SyncDrop? [y/N]: ")).trim());
       while (more) {
-        let raw = "";
-        while (!raw) raw = (await io.ask("  Path of the folder: ")).trim();
+        const added = await askFolder("  Path of the folder (Enter to stop adding): ");
+        if (!added) break;
+        const raw = added.raw;
         const name = (await io.ask(`  Name for this folder, or Enter for default [${path.basename(expandPath(raw)) || "Folder"}]: `)).trim() || path.basename(expandPath(raw)) || "Folder";
-        await prepare(raw);
         const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "folder";
         let id = base;
         for (let k = 2; used.has(id); k++) id = `${base}-${k}`;

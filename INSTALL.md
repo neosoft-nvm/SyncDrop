@@ -18,8 +18,24 @@ SyncDrop adds a **SyncDrop** option to your right-click menu. Pick a file or fol
 3. When it asks for your sync folder, type the folder's path (or press **Enter** to use `~/SyncDrop`). If the folder doesn't exist, say **Y** to create it.
    Next it asks what **name** to show in the right-click menu for that folder (Enter keeps the suggestion, which is the folder's own name, e.g. `~/Documents` suggests "Documents"). Then it asks whether you want to add more folders: answer **y**, say how many (1 to 6), and it walks you through each one (path, then menu name).
 4. Log out and back in, or restart your file manager.
+5. If the installer shows a red **WARNING about PATH**, read [If it says "PATH"](#if-it-says-path) below. It only affects typing `syncdrop` in a terminal, not the right-click menu.
 
 Don't use `sudo`. Nothing here needs an administrator password.
+
+## If it says "PATH"
+
+SyncDrop installs to `~/.local/bin`. If your computer doesn't look in that folder, typing `syncdrop` in a terminal gives "command not found". **The right-click menu still works**, so you can ignore the warning if you only use the menu.
+
+To fix it, paste the line for your terminal, press **Enter**, then open a new terminal window:
+
+| Your shell | Line to paste |
+|---|---|
+| bash (most common) | `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc` |
+| zsh | `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc` |
+| fish | `fish_add_path ~/.local/bin` |
+| not sure | `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile`, then log out and back in |
+
+Not sure which you use? Run `echo $SHELL`. Many systems add `~/.local/bin` to PATH by themselves at the next login, so logging out and back in may be all you need. Check with `syncdrop --version`.
 
 ## Use it
 

@@ -17,6 +17,7 @@ import { SyncDrop, type OperationResult } from "../core/syncdrop.js";
 import { createLogger } from "../shared/logging.js";
 import { desktopNotify } from "../shared/notify.js";
 import { configFilePath, expandPath, historyFilePath } from "../shared/paths.js";
+import { pathAdvice } from "../shared/pathhint.js";
 import { getVersion } from "../shared/version.js";
 import { defaultCli } from "../platforms/common.js";
 import { ADAPTER_NAMES, createAdapter } from "../platforms/registry.js";
@@ -445,7 +446,9 @@ async function cmdSetup(p: Parsed, io: CliIO): Promise<number> {
   if (isSea()) {
     const dir = path.dirname(process.execPath);
     if (!(process.env.PATH ?? "").split(path.delimiter).includes(dir)) {
-      io.out(`Note: ${dir} is not on your PATH, so typing 'syncdrop' in a terminal won't work until you log out and back in. The right-click menu is not affected.`);
+      const red = io.interactive && !process.env.NO_COLOR;
+      io.out("");
+      pathAdvice(dir).forEach((line, i) => io.out(red && i === 0 ? `\x1b[31;1mWARNING: ${line}\x1b[0m` : i === 0 ? `WARNING: ${line}` : line));
     }
   }
   return code;

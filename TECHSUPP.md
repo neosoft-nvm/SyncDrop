@@ -15,7 +15,7 @@ Details behind [INSTALL.md](INSTALL.md): how the installer works, building from 
 2. Runs `--version` on it and refuses to install a broken download.
 3. Runs `syncdrop setup`, using `/dev/tty` when piped from `curl` (stdin is the script then).
 
-`syncdrop setup` keeps an existing config (else runs the `config init` prompt, or `--path <dir>` to skip it), installs every adapter whose file manager is found, prints adapter notes (restart command, missing `python3-caja`/`python3-nautilus`), and warns if the binary's folder is not on `PATH`.
+`syncdrop setup` keeps an existing config (else runs the `config init` prompt, or `--path <dir>` to skip it), installs every adapter whose file manager is found, prints adapter notes (restart command, missing `python3-caja`/`python3-nautilus`), and, if the binary's folder is not on `PATH`, prints a WARNING (red on a colour terminal unless `NO_COLOR` is set) with a copy-paste fix for the login shell (`src/shared/pathhint.ts`: fish, zsh, bash, else `~/.profile`). `install.sh` repeats a plain note only when `setup` could not run (no terminal). Menu entries use absolute paths, so PATH never affects them.
 
 ### Why a single binary
 

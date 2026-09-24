@@ -53,3 +53,11 @@ elif ( : </dev/tty ) 2>/dev/null; then
 else
   echo "No terminal available. Finish by running: $TARGET setup"
 fi
+
+# 'syncdrop setup' warns about PATH itself; repeat it here only when setup could not run.
+case ":${PATH}:" in
+  *":${BIN_DIR}:"*) ;;
+  *) if [ ! -t 0 ] && ! ( : </dev/tty ) 2>/dev/null; then
+       echo "NOTE: ${BIN_DIR} is not on your PATH, so typing 'syncdrop' in a terminal will not work yet. The right-click menu is not affected. See INSTALL.md for how to add it." >&2
+     fi ;;
+esac

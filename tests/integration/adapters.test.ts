@@ -38,12 +38,36 @@ describe("standalone binary (no script)", () => {
   });
 });
 
+describe("menu settings", () => {
+  it("offers only the chosen operations, in the chosen order, and the given target order", () => {
+    const c: AdapterContext = { ...ctx, targets: [...ctx.targets].reverse(), operations: ["link", "copy"] };
+    const xml = buildActions(c);
+    expect(xml.match(/<name>SyncDrop: [^<]*/g)).toEqual([
+      "<name>SyncDrop: Link to Docs &amp; Notes", "<name>SyncDrop: Copy to Docs &amp; Notes",
+      "<name>SyncDrop: Link to Main Sync", "<name>SyncDrop: Copy to Main Sync", "<name>SyncDrop: Settings",
+    ]);
+    expect(buildServiceMenu(c)).not.toContain("Move to");
+    expect(buildServiceMenu(c)).toContain("--operation");
+  });
+
+  it("adapters report whether they are installed", async () => {
+    const a = new DolphinAdapter(ctx);
+    expect(await a.isInstalled()).toBe(false);
+    await a.install();
+    expect(await a.isInstalled()).toBe(true);
+    await a.uninstall();
+    expect(await a.isInstalled()).toBe(false);
+  });
+});
+
 describe("thunar", () => {
   it("builds one escaped action per target passing %F", () => {
     const xml = buildActions(ctx);
-    expect(xml.match(/<action>/g)).toHaveLength(2);
-    expect(xml).toContain("SyncDrop: Docs &amp; Notes");
-    expect(xml).toContain('add --target main --conflict keep-both --notify -- %F');
+    // 2 targets x (copy, move, link) + Settings
+    expect(xml.match(/<action>/g)).toHaveLength(7);
+    expect(xml).toContain("SyncDrop: Link to Docs &amp; Notes");
+    expect(xml).toContain("SyncDrop: Settings");
+    expect(xml).toContain('add --target main --operation move --conflict keep-both --notify -- %F');
     expect(xml).toContain("&quot;/opt/my apps/syncdrop/dist/cli/main.js&quot;");
     expect(xml).toContain("<directories/>");
   });
@@ -58,7 +82,7 @@ describe("thunar", () => {
     await adapter.install();
     expect(await readFile(uca, "utf8")).toBe(once);
     expect(once).toContain("Open Terminal");
-    expect(once.match(/syncdrop-/g)).toHaveLength(2);
+    expect(once.match(/<unique-id>syncdrop-/g)).toHaveLength(7);
     expect((await stat(uca + ".syncdrop.bak")).isFile()).toBe(true);
 
     await adapter.uninstall();
@@ -78,9 +102,10 @@ describe("dolphin", () => {
   it("builds a submenu service menu with an action per target", () => {
     const d = buildServiceMenu(ctx);
     expect(d).toContain("X-KDE-Submenu=SyncDrop");
-    expect(d).toContain("Actions=syncdrop-0-main;syncdrop-1-docs;");
-    expect(d).toContain("[Desktop Action syncdrop-1-docs]");
-    expect(d).toContain("Name=Docs & Notes");
+    expect(d).toContain("Actions=syncdrop-0-main-copy;syncdrop-1-main-move;syncdrop-2-main-link;syncdrop-3-docs-copy;");
+    expect(d).toContain("[Desktop Action syncdrop-3-docs-copy]");
+    expect(d).toContain("[Desktop Action syncdrop-settings]");
+    expect(d).toContain("Name=Move to Docs & Notes");
     expect(d).toMatch(/Exec=.*"add" "--target" "main".*%F/);
   });
   it("installs an executable file and uninstalls it", async () => {
@@ -97,7 +122,8 @@ describe("nautilus", () => {
     const py = buildExtension(ctx);
     expect(py).toContain('SYNCDROP_CMD = ["/usr/bin/node","/opt/my apps/syncdrop/dist/cli/main.js"]');
     expect(py).toContain("Nautilus.MenuProvider");
-    expect(py).toContain('"targets", "--json"');
+    expect(py).toContain('"menu", "--json"');
+    expect(py).toContain("SETTINGS_CMD");
   });
   it("installs and uninstalls the extension file", async () => {
     const a = new NautilusAdapter(ctx);

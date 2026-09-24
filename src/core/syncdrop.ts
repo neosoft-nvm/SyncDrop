@@ -6,6 +6,7 @@ import type { ConflictResolver } from "./conflicts.js";
 import { copyEntry, lstatOrNull, type CopyContext } from "./copy.js";
 import { ArgsError, OperationError, SyncDropError, describeError } from "./errors.js";
 import { nullHistory, type HistoryStore } from "./history.js";
+import { linkEntry } from "./link.js";
 import { moveEntry } from "./move.js";
 import { assertSafeDestination } from "./validation.js";
 
@@ -112,7 +113,8 @@ export class SyncDrop {
       await assertSafeDestination(source, destDir);
       const dest = path.join(destDir, path.basename(source));
       const skippedBefore = ctx.stats.skipped;
-      const final = operation === "move" ? await moveEntry(source, dest, ctx) : await copyEntry(source, dest, ctx);
+      const run = operation === "move" ? moveEntry : operation === "link" ? linkEntry : copyEntry;
+      const final = await run(source, dest, ctx);
       const skippedItems = ctx.stats.skipped - skippedBefore;
       if (final === null) return { success: true, source, operation, skipped: true };
       return { success: true, source, destination: final, operation, ...(skippedItems ? { skippedItems } : {}) };

@@ -23,9 +23,20 @@ Don't use `sudo`. Nothing here needs an administrator password.
 
 ## Use it
 
-Right-click a file or folder, choose **SyncDrop**, then pick where to send it. You'll get a small notification when it's done, and Syncthing does the rest.
+Right-click a file or folder, choose **SyncDrop**, then pick an action and a folder: **Copy to…**, **Move to…** (removes the original after copying) or **Link to…** (puts a shortcut to the original in that folder instead of a copy). You'll get a small notification when it's done, and Syncthing does the rest.
 
 If a file with the same name is already there, SyncDrop keeps both (`report.pdf` and `report (1).pdf`). It never overwrites anything.
+
+## Change the menu
+
+Right-click, choose **SyncDrop**, then **Settings** (or run `syncdrop settings` in a terminal). There you can:
+
+- pick the default action and what to do when a file already exists,
+- choose which of Copy / Move / Link appear, and put them in the order you like,
+- add, rename, remove and re-order your folders,
+- add or remove the SyncDrop menu in each file manager on this computer.
+
+Changes are saved right away. Restart your file manager to see them (Nautilus and Caja pick them up on their own). Removing a folder from the menu never deletes it on disk.
 
 ## If something goes wrong
 

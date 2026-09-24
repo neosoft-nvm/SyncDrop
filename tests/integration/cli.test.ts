@@ -2,7 +2,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { run, type CliIO } from "../../src/cli/cli.js";
 import { cleanupTmp, read, tmpDir, tree, write } from "../helpers.js";
-import { mkdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readlink, writeFile } from "node:fs/promises";
 
 cleanupTmp();
 
@@ -190,5 +190,83 @@ describe("cli", () => {
     await expect(read(process.env.SYNCDROP_CONFIG)).rejects.toThrow();
     expect(await read(path.join(folder, "keep.txt"))).toBe("x");
     expect(await run(["uninstall"], fakeIO().io)).toBe(0); // idempotent
+  });
+
+  describe("link, menu settings and ordering", () => {
+    beforeEach(() => {
+      process.env.XDG_CONFIG_HOME = path.join(root, "xdg-config");
+      process.env.XDG_DATA_HOME = path.join(root, "xdg-data");
+    });
+
+    it("link puts a symlink in the target and leaves the source alone", async () => {
+      const f = await write(path.join(root, "in/a.txt"), "hello");
+      const c = fakeIO();
+      expect(await run(["add", "-o", "link", "-c", "skip", "--", f], c.io)).toBe(0);
+      const l = path.join(dest, "a.txt");
+      expect((await lstat(l)).isSymbolicLink()).toBe(true);
+      expect(await readlink(l)).toBe(f);
+      expect(await read(f)).toBe("hello");
+      expect(c.out[0]).toContain("linked");
+      // second time: keep-both makes a numbered link, overwrite replaces a link, but never a real file
+      expect(await run(["add", "-o", "link", "-c", "keep-both", "--", f], fakeIO().io)).toBe(0);
+      expect((await lstat(path.join(dest, "a (1).txt"))).isSymbolicLink()).toBe(true);
+      expect(await run(["add", "-o", "link", "-c", "overwrite", "--", f], fakeIO().io)).toBe(0);
+      await write(path.join(dest, "real.txt"));
+      const real = await write(path.join(root, "in/real.txt"));
+      expect(await run(["add", "-o", "link", "-c", "overwrite", "--", real], fakeIO().io)).toBe(1);
+      expect(await read(path.join(dest, "real.txt"))).toBe("x");
+    });
+
+    it("link of a folder is a link to the folder", async () => {
+      await write(path.join(root, "in/dir/f.txt"));
+      expect(await run(["add", "-o", "link", "--", path.join(root, "in/dir")], fakeIO().io)).toBe(0);
+      expect((await lstat(path.join(dest, "dir"))).isSymbolicLink()).toBe(true);
+    });
+
+    it("adds, orders, renames and removes folders, keeping unknown config fields", async () => {
+      const cfg = process.env.SYNCDROP_CONFIG as string;
+      const raw = JSON.parse(await read(cfg));
+      await writeFile(cfg, JSON.stringify({ ...raw, custom: { keep: true } }));
+      const ids = async () => { const c = fakeIO(); await run(["targets", "--json"], c.io); return (JSON.parse(c.out.join("\n")) as { id: string }[]).map((t) => t.id); };
+
+      expect(await run(["target", "add", "Photos", "--path", path.join(root, "p")], fakeIO().io)).toBe(0);
+      expect(await run(["target", "add", "Docs", "--path", path.join(root, "d")], fakeIO().io)).toBe(0);
+      expect(await ids()).toEqual(["main", "photos", "docs"]);
+      expect(await run(["target", "move", "docs", "1"], fakeIO().io)).toBe(0);
+      expect(await ids()).toEqual(["docs", "main", "photos"]);
+      expect(await run(["target", "rename", "docs", "My Docs"], fakeIO().io)).toBe(0);
+      expect(await run(["target", "remove", "main"], fakeIO().io)).toBe(0);
+      expect(await ids()).toEqual(["docs", "photos"]);
+      const after = JSON.parse(await read(cfg));
+      expect(after.custom).toEqual({ keep: true });
+      expect(after.defaults.target).toBe("docs"); // default moved off the removed target
+      expect(await run(["target", "remove", "photos"], fakeIO().io)).toBe(0);
+      expect(await run(["target", "remove", "docs"], fakeIO().io)).toBe(3); // last one is protected
+    });
+
+    it("menu lists entries in the configured order and honours config set menu", async () => {
+      expect(await run(["config", "set", "menu", "link,copy"], fakeIO().io)).toBe(0);
+      const c = fakeIO();
+      await run(["menu"], c.io);
+      expect(c.out).toEqual(["Link to Main Sync", "Copy to Main Sync"]);
+      expect(await run(["config", "set", "menu", "copy,teleport"], fakeIO().io)).toBe(2);
+      expect(await run(["config", "set", "operation", "link"], fakeIO().io)).toBe(0);
+      expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG as string)).defaults.operation).toBe("link");
+    });
+
+    it("changing the menu refreshes menus that are already installed", async () => {
+      expect(await run(["integrate", "install", "dolphin"], fakeIO().io)).toBe(0);
+      expect(await run(["config", "set", "menu", "copy"], fakeIO().io)).toBe(0);
+      const desktop = await read(path.join(root, "xdg-data", "kio", "servicemenus", "syncdrop.desktop"));
+      expect(desktop).not.toContain("Move to");
+    });
+
+    it("settings needs a terminal, and edits defaults when there is one", async () => {
+      expect(await run(["settings"], fakeIO().io)).toBe(2);
+      // 1 Defaults > 1 operation > 3 link, then Enter to leave
+      const c = fakeIO({ interactive: true, answers: ["1", "1", "3", ""] });
+      expect(await run(["settings"], c.io)).toBe(0);
+      expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG as string)).defaults.operation).toBe("link");
+    });
   });
 });

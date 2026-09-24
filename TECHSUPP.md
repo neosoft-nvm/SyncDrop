@@ -55,7 +55,7 @@ Dry run without publishing: `gh workflow run release --ref <branch>` (or Actions
 
 ## Configuration
 
-Per-user, no root. `syncdrop config path` prints the location (Linux: `~/.config/syncdrop/config.json`; Windows: `%APPDATA%\syncdrop\config.json`). To add another sync folder, edit `targets` in that file, then run `syncdrop setup` (Thunar and Dolphin need the refresh; Caja and Nautilus read targets each time the menu opens). `config init` on a terminal also asks for the main target's display name and up to 10 folders in total targets (ids are slugs of the names, e.g. `papers`, `papers-2`). Scripts can skip the prompts: `syncdrop config init --path ~/SyncDrop`. Run as your normal user; under `sudo` the config goes to `/root`.
+Per-user, no root. `syncdrop config path` prints the location (Linux: `~/.config/syncdrop/config.json`; Windows: `%APPDATA%\syncdrop\config.json`). To add another sync folder use `syncdrop settings`, `syncdrop target add NAME --path DIR`, or edit `targets` in that file. Every settings/target/`config set` change refreshes the menus of file managers that already have SyncDrop entries (Thunar and Dolphin are regenerated; Caja and Nautilus read `syncdrop menu --json` each time the menu opens). Order and actions live in the optional `menu` section (`operations`, `order`); absent means all of copy/move/link and file order. Edits are validated, written to a temp file and renamed, and keep unknown fields. `config init` on a terminal also asks for the main target's display name and up to 10 folders in total targets (ids are slugs of the names, e.g. `papers`, `papers-2`). Scripts can skip the prompts: `syncdrop config init --path ~/SyncDrop`. Run as your normal user; under `sudo` the config goes to `/root`.
 
 History: `~/.local/state/syncdrop/history.jsonl`. `syncdrop uninstall` keeps config and history unless `--purge` is given (it then deletes the config file and history file, and their folders if empty). It removes the running binary only when run as the installed single-file binary. Per-adapter removal: `syncdrop integrate uninstall`.
 
@@ -67,6 +67,8 @@ History: `~/.local/state/syncdrop/history.jsonl`. `syncdrop uninstall` keeps con
 | Caja | `~/.local/share/caja-python/extensions/syncdrop.py` (needs `python3-caja`) |
 | Nautilus | `~/.local/share/nautilus-python/extensions/syncdrop.py` (needs `python3-nautilus`) |
 | Dolphin | `~/.local/share/kio/servicemenus/syncdrop.desktop` |
+
+Menu entries per folder: Copy / Move / Link, then a Settings item. Settings opens `syncdrop settings` in the first terminal emulator found (x-terminal-emulator, gnome-terminal, mate-terminal, xfce4-terminal, konsole, xterm) through a small `sh -c` wrapper. That wrapper and all four menu layouts are **untested in real file managers**. `link` uses `fs.symlink` with the absolute source path.
 
 Manage individually: `syncdrop integrate <install|uninstall|status> [thunar|caja|dolphin|nautilus|all]`. Restart commands: `thunar -q`, `caja -q`, `nautilus -q`; Dolphin just needs a restart.
 

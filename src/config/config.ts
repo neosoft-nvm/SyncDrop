@@ -81,11 +81,28 @@ export function validateConfig(raw: unknown): Result<Config, string[]> {
   if (!CONFLICT_POLICIES.includes(conflict)) errors.push(`defaults.conflict must be one of: ${CONFLICT_POLICIES.join(", ")}`);
   if (target && !(target in targets) && errors.length === 0) errors.push(`defaults.target '${target}' is not a defined target`);
 
+  const m = isObject(raw.menu) ? raw.menu : {};
+  let menuOps: Operation[] = [...OPERATIONS];
+  if (m.operations !== undefined) {
+    const list = m.operations;
+    if (!Array.isArray(list) || list.length === 0 || list.some((o) => !OPERATIONS.includes(o as Operation)) || new Set(list).size !== list.length) {
+      errors.push(`menu.operations must be a non-empty list without repeats of: ${OPERATIONS.join(", ")}`);
+    } else {
+      menuOps = list as Operation[];
+    }
+  }
+  const wanted = m.order === undefined ? [] : Array.isArray(m.order) && m.order.every((x) => typeof x === "string") ? (m.order as string[]) : null;
+  if (wanted === null) errors.push("menu.order must be a list of target ids");
+  // Listed ids first (unknown ones are ignored), then any target not listed, in file order.
+  const order = [...new Set([...(wanted ?? []).filter((id) => id in targets), ...Object.keys(targets)])];
+
   if (errors.length) return err(errors);
   return ok({
     version: raw.version as number,
     targets,
     defaults: { operation, conflict, target },
+    menu: { operations: menuOps },
+    order,
     raw: raw as Config["raw"],
   });
 }

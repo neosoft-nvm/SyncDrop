@@ -4,7 +4,7 @@ A cross-platform file-to-sync-target utility with file-manager integrations.
 
 **Select → Right-click → SyncDrop → Target → File appears in your synchronized folder.**
 
-> **Status: v0.1.2.** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 75 automated tests. The file-manager menus have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
+> **Status: v0.2.0.** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 83 automated tests. The file-manager menus (including the new Copy / Move / Link entries, the Settings item and the terminal launch) have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
 
 ## What it does
 
@@ -48,9 +48,14 @@ Per-user JSON file. Linux: `~/.config/syncdrop/`. Run `syncdrop config path` to 
     "main":     { "name": "Main Sync", "path": "~/SyncDrop",           "backend": "syncthing" },
     "projects": { "name": "Projects",  "path": "~/SyncDrop/Projects",  "backend": "syncthing" }
   },
-  "defaults": { "operation": "copy", "target": "main", "conflict": "ask" }
+  "defaults": { "operation": "copy", "target": "main", "conflict": "ask" },
+  "menu": { "operations": ["copy", "move", "link"], "order": ["projects", "main"] }
 }
 ```
+
+- `menu.operations`: which actions each folder offers in the right-click menu, in that order (`copy`, `move`, `link`). Default: all three.
+- `menu.order`: order of the folders in the menu. Folders not listed follow in file order.
+- `link` puts a symbolic link (a shortcut) to the original in the target folder instead of a copy. Syncthing syncs the link itself, not the file it points to, so other devices only get a working shortcut if the original exists at the same path there.
 
 - Target IDs must be unique.
 - `~` is expanded on Linux.
@@ -69,6 +74,15 @@ syncdrop setup                                     # guided first-time setup (fo
 syncdrop config path                               # print config location
 syncdrop config init                               # asks which folder Syncthing syncs
 syncdrop config init --path ~/SyncDrop            # same, without the prompt
+syncdrop add --target main --operation link ./big-folder   # shortcut instead of a copy
+syncdrop settings                                  # interactive: defaults, menu items and order, folders, file managers
+syncdrop target add Photos --path ~/Photos         # add a folder to the menu
+syncdrop target move photos 1                      # menu position (1 = first)
+syncdrop target rename photos "My Photos"
+syncdrop target remove photos                      # never touches the folder on disk
+syncdrop config set menu copy,link                 # which actions the menu offers, in order
+syncdrop config set operation|conflict|target VALUE
+syncdrop menu [--json]                             # entries the file managers show
 syncdrop history -n 10
 syncdrop integrate install all                     # add file-manager menu entries
 syncdrop integrate uninstall caja
@@ -86,6 +100,7 @@ Exit codes: `0` success · `1` operation failed · `2` invalid arguments · `3` 
 - `ask` needs an interactive terminal; otherwise SyncDrop stops with exit code 4 and asks you to pass `--conflict`.
 - Merging into an existing folder never clobbers: conflicts inside it follow the same policy.
 - Files are written to a temp name and renamed, so Syncthing never sees a half-copied file.
+- Link never changes the source, and never replaces a real file or folder (use keep-both or skip); overwrite only replaces an existing link.
 - Copy never deletes the source. Move deletes the source only after the copy succeeds.
 - Copying a folder into itself or a subfolder of itself is refused.
 - No root/admin rights needed.

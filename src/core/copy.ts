@@ -22,7 +22,7 @@ export async function lstatOrNull(p: string): Promise<Stats | null> {
   }
 }
 
-async function decide(ctx: CopyContext, source: string, destination: string): Promise<ResolvedPolicy> {
+export async function decide(ctx: CopyContext, source: string, destination: string): Promise<ResolvedPolicy> {
   if (ctx.policy !== "ask") return ctx.policy;
   if (!ctx.resolve) {
     throw new ConflictError(

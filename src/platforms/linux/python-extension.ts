@@ -1,4 +1,4 @@
-import { cliArgv, type AdapterContext } from "../types.js";
+import { cliArgv, settingsArgv, type AdapterContext } from "../types.js";
 
 export interface PythonExtensionOptions {
   /** GI namespace: "Nautilus" or "Caja". */
@@ -11,11 +11,12 @@ export interface PythonExtensionOptions {
 
 /**
  * Python file-manager extension (nautilus-python / python-caja share one API).
- * The target list comes from `syncdrop targets --json` each time the menu opens,
- * so new targets appear without reinstalling.
+ * The entries come from `syncdrop menu --json` each time the menu opens,
+ * so changes made in the settings appear without reinstalling.
  */
 export function buildPythonExtension(ctx: AdapterContext, o: PythonExtensionOptions): string {
   const cmd = JSON.stringify(cliArgv(ctx.cli));
+  const settingsCmd = JSON.stringify(settingsArgv(ctx.cli));
   const [first, second] = o.versions;
   const requireVersion = second
     ? `try:
@@ -33,12 +34,13 @@ ${requireVersion}
 from gi.repository import GObject, ${o.module}
 
 SYNCDROP_CMD = ${cmd}
+SETTINGS_CMD = ${settingsCmd}
 
 
-def _targets():
+def _entries():
     try:
         out = subprocess.run(
-            SYNCDROP_CMD + ["targets", "--json"],
+            SYNCDROP_CMD + ["menu", "--json"],
             capture_output=True, text=True, timeout=10, check=True,
         ).stdout
         return json.loads(out)
@@ -47,10 +49,10 @@ def _targets():
 
 
 class SyncDropExtension(GObject.GObject, ${o.module}.MenuProvider):
-    def _send(self, _item, target_id, paths):
+    def _send(self, _item, target_id, operation, paths):
         subprocess.Popen(
             SYNCDROP_CMD
-            + ["add", "--target", target_id, "--conflict", "keep-both", "--notify", "--"]
+            + ["add", "--target", target_id, "--operation", operation, "--conflict", "keep-both", "--notify", "--"]
             + paths
         )
 
@@ -64,16 +66,19 @@ class SyncDropExtension(GObject.GObject, ${o.module}.MenuProvider):
                 paths.append(p)
         if not paths:
             return []
-        targets = _targets()
-        if not targets:
+        entries = _entries()
+        if not entries:
             return []
         root = ${o.module}.MenuItem(name="SyncDrop::Root", label="SyncDrop")
         menu = ${o.module}.Menu()
         root.set_submenu(menu)
-        for t in targets:
-            item = ${o.module}.MenuItem(name="SyncDrop::Target::" + t["id"], label=t["name"])
-            item.connect("activate", self._send, t["id"], paths)
+        for e in entries:
+            item = ${o.module}.MenuItem(name="SyncDrop::" + e["target"] + "::" + e["operation"], label=e["label"])
+            item.connect("activate", self._send, e["target"], e["operation"], paths)
             menu.append_item(item)
+        settings = ${o.module}.MenuItem(name="SyncDrop::Settings", label="Settings")
+        settings.connect("activate", lambda _item: subprocess.Popen(SETTINGS_CMD))
+        menu.append_item(settings)
         return [root]
 `;
 }

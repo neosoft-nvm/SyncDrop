@@ -5,7 +5,11 @@ import path from "node:path";
 import { isSea } from "node:sea";
 import readline from "node:readline";
 import { loadConfig, writeDefaultConfig } from "../config/config.js";
-import { CONFLICT_POLICIES, OPERATIONS, type ConflictPolicy, type Operation } from "../config/types.js";
+import { CONFLICT_POLICIES, OPERATIONS, type Config, type ConflictPolicy, type Operation } from "../config/types.js";
+import { addTarget, isOperation, makeTargetId, moveTarget, removeTarget, renameTarget, setDefaults, setMenuOperations } from "../config/edit.js";
+import { menuEntries } from "../core/menu.js";
+import { adapterContext, refreshMenus } from "./menus.js";
+import { runSettings } from "./settings.js";
 import type { ConflictResolver } from "../core/conflicts.js";
 import { ConfigError, ConflictError, EXIT, SyncDropError, ArgsError, describeError, exitCodeFor } from "../core/errors.js";
 import { JsonlHistory } from "../core/history.js";
@@ -32,10 +36,15 @@ Usage:
   syncdrop [--verbose] <command> [options]
 
 Commands:
-  targets, target list        List configured targets (--json for machine output)
+  targets, target list        List configured targets in menu order (--json for machine output)
+  target add NAME --path <dir>   Add a folder to the menu   (--id <id> to choose the id)
+  target remove|rename|move ...  target remove ID | target rename ID NAME | target move ID POSITION
+  menu [--json]               Show the menu entries file managers display
+  settings                    Change defaults, menu items and their order, and file-manager integration
+  config set <key> <value>    key: operation | conflict | target | menu (e.g. menu copy,move,link)
   add FILE...                 Copy or move files/folders into a target
       -t, --target <id>         Target id (default: config defaults.target)
-      -o, --operation <op>      copy | move            (default: config)
+      -o, --operation <op>      copy | move | link     (default: config; link = shortcut to the original)
       -c, --conflict <policy>   ask | overwrite | skip | keep-both
           --notify              Show a desktop notification when done
   config path                 Print the configuration file location
@@ -62,7 +71,7 @@ interface Parsed {
   flags: Map<string, string | true>;
 }
 
-const VALUE_OPTS: Record<string, string> = { "--target": "target", "-t": "target", "--operation": "operation", "-o": "operation", "--conflict": "conflict", "-c": "conflict", "--limit": "limit", "--path": "path", "-n": "limit" };
+const VALUE_OPTS: Record<string, string> = { "--target": "target", "-t": "target", "--operation": "operation", "-o": "operation", "--conflict": "conflict", "-c": "conflict", "--limit": "limit", "--path": "path", "--id": "id", "-n": "limit" };
 const BOOL_OPTS: Record<string, string> = { "--help": "help", "-h": "help", "--version": "version", "-V": "version", "--verbose": "verbose", "-v": "verbose", "--json": "json", "--notify": "notify", "--force": "force", "--purge": "purge" };
 
 export function parseArgs(argv: string[]): Parsed {
@@ -114,7 +123,7 @@ function makeResolver(io: CliIO): ConflictResolver {
 }
 
 function describeResult(r: OperationResult): string {
-  const verb = r.operation === "move" ? "moved" : "copied";
+  const verb = r.operation === "move" ? "moved" : r.operation === "link" ? "linked" : "copied";
   if (!r.success) return `FAILED   ${r.source}: ${r.error}`;
   if (r.skipped) return `skipped  ${r.source} (already exists)`;
   const extra = r.skippedItems ? ` (${r.skippedItems} existing item(s) skipped)` : "";
@@ -162,7 +171,7 @@ async function cmdAdd(p: Parsed, io: CliIO, logger: ReturnType<typeof createLogg
 async function cmdTargets(p: Parsed, io: CliIO): Promise<number> {
   const config = await loadConfig();
   const rows = await Promise.all(
-    Object.values(config.targets).map(async (t) => ({
+    config.order.map((id) => config.targets[id] as Config["targets"][string]).map(async (t) => ({
       id: t.id,
       name: t.name,
       backend: t.backend,
@@ -256,7 +265,8 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
     }
     return EXIT.OK;
   }
-  throw new ArgsError("config: expected 'path' or 'init'");
+  if (sub === "set") return await cmdConfigSet(p, io);
+  throw new ArgsError("config: expected 'path', 'init' or 'set'");
 }
 
 async function cmdHistory(p: Parsed, io: CliIO): Promise<number> {
@@ -275,6 +285,67 @@ async function cmdHistory(p: Parsed, io: CliIO): Promise<number> {
   return EXIT.OK;
 }
 
+async function cmdMenu(p: Parsed, io: CliIO): Promise<number> {
+  const entries = menuEntries(await loadConfig());
+  if (p.flags.has("json")) io.out(JSON.stringify(entries, null, 2));
+  else entries.forEach((e) => io.out(e.label));
+  return EXIT.OK;
+}
+
+async function cmdTargetEdit(p: Parsed, io: CliIO): Promise<number> {
+  const [, sub, a, b] = p.positionals;
+  const config = await loadConfig();
+  let updated: Config;
+  if (sub === "add") {
+    const name = a;
+    const dir = p.flags.get("path");
+    if (!name || typeof dir !== "string") throw new ArgsError("target add: usage: target add NAME --path <folder> [--id <id>]");
+    if (!path.isAbsolute(expandPath(dir))) throw new ArgsError(`path must be absolute or start with ~ (got '${dir}')`);
+    const id = typeof p.flags.get("id") === "string" ? (p.flags.get("id") as string) : makeTargetId(name, Object.keys(config.targets));
+    updated = await addTarget(id, name, dir);
+    io.out(`added '${id}' ("${name}") -> ${dir}`);
+  } else if (sub === "remove" && a) {
+    updated = await removeTarget(a);
+    io.out(`removed '${a}' (the folder itself was not touched)`);
+  } else if (sub === "rename" && a && b) {
+    updated = await renameTarget(a, b);
+    io.out(`renamed '${a}' to "${b}"`);
+  } else if (sub === "move" && a && b) {
+    const pos = Number(b);
+    if (!Number.isInteger(pos) || pos < 1) throw new ArgsError("target move: POSITION must be 1 or more");
+    updated = await moveTarget(a, pos);
+    io.out(`menu order: ${updated.order.join(", ")}`);
+  } else {
+    throw new ArgsError("target: expected list, add, remove, rename or move");
+  }
+  await refreshMenus(updated, io);
+  return EXIT.OK;
+}
+
+async function cmdConfigSet(p: Parsed, io: CliIO): Promise<number> {
+  const [, , key, value] = p.positionals;
+  if (!key || !value) throw new ArgsError("config set: usage: config set <operation|conflict|target|menu> <value>");
+  let updated: Config;
+  if (key === "operation") {
+    if (!isOperation(value)) throw new ArgsError(`operation must be one of: ${OPERATIONS.join(", ")}`);
+    updated = await setDefaults({ operation: value });
+  } else if (key === "conflict") {
+    if (!CONFLICT_POLICIES.includes(value as ConflictPolicy)) throw new ArgsError(`conflict must be one of: ${CONFLICT_POLICIES.join(", ")}`);
+    updated = await setDefaults({ conflict: value as ConflictPolicy });
+  } else if (key === "target") {
+    updated = await setDefaults({ target: value });
+  } else if (key === "menu") {
+    const ops = value.split(",").map((s) => s.trim());
+    if (!ops.every(isOperation)) throw new ArgsError(`menu: use a comma-separated list of: ${OPERATIONS.join(", ")}`);
+    updated = await setMenuOperations(ops);
+  } else {
+    throw new ArgsError(`config set: unknown key '${key}'`);
+  }
+  io.out(`${key} = ${value}`);
+  await refreshMenus(updated, io);
+  return EXIT.OK;
+}
+
 async function cmdIntegrate(p: Parsed, io: CliIO): Promise<number> {
   const action = p.positionals[1];
   const which = p.positionals[2] ?? "all";
@@ -282,8 +353,7 @@ async function cmdIntegrate(p: Parsed, io: CliIO): Promise<number> {
     throw new ArgsError("integrate: expected install, uninstall or status");
   }
   // Removing entries must work even after the config was deleted.
-  const targets = action === "install" ? Object.values((await loadConfig()).targets) : [];
-  const ctx = { cli: defaultCli(), targets };
+  const ctx = action === "install" ? adapterContext(await loadConfig()) : { cli: defaultCli(), targets: [] };
   const names = which === "all" ? [...ADAPTER_NAMES] : [which];
   let code: number = EXIT.OK;
   for (const name of names) {
@@ -347,7 +417,7 @@ async function cmdSetup(p: Parsed, io: CliIO): Promise<number> {
   }
   io.out("");
   const config = await loadConfig();
-  const ctx = { cli: defaultCli(), targets: Object.values(config.targets) };
+  const ctx = adapterContext(config);
   let installed = 0;
   const installedNames: string[] = [];
   let code: number = EXIT.OK;
@@ -443,7 +513,11 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
         return await cmdTargets(p, io);
       case "target":
         if (p.positionals[1] === "list") return await cmdTargets(p, io);
-        throw new ArgsError("target: expected 'list'");
+        return await cmdTargetEdit(p, io);
+      case "menu":
+        return await cmdMenu(p, io);
+      case "settings":
+        return await runSettings(io);
       case "config":
         return await cmdConfig(p, io);
       case "history":

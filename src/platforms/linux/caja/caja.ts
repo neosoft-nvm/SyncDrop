@@ -38,6 +38,8 @@ export class CajaAdapter implements FileManagerAdapter {
 
   isSupported = async () => process.platform === "linux" && !!(await which("caja"));
 
+  isInstalled = () => access(this.file).then(() => true, () => false);
+
   async install(): Promise<AdapterReport> {
     await mkdir(path.dirname(this.file), { recursive: true });
     await writeFile(this.file, buildExtension(this.ctx));

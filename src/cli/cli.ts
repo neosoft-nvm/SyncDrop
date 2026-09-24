@@ -222,7 +222,8 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
     const extras: Record<string, { name: string; path: string }> = {};
     if (folder && io.interactive && !p.flags.has("path")) {
       io.out("This name is what you will see in the right-click menu.");
-      mainName = (await io.ask(`Name for this folder [${mainName}]: `)).trim() || mainName;
+      mainName = path.basename(expandPath(folder)) || mainName;
+      mainName = (await io.ask(`Name for this folder, or Enter for default [${mainName}]: `)).trim() || mainName;
       const more = /^y/i.test((await io.ask("Add more folders to SyncDrop? [y/N]: ")).trim());
       if (more) {
         let count = 0;
@@ -236,7 +237,7 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
           io.out(`Folder ${i} of ${count}`);
           let raw = "";
           while (!raw) raw = (await io.ask("  Path of the folder: ")).trim();
-          const name = (await io.ask(`  Name shown in the menu [${path.basename(expandPath(raw)) || "Folder"}]: `)).trim() || path.basename(expandPath(raw)) || "Folder";
+          const name = (await io.ask(`  Name for this folder, or Enter for default [${path.basename(expandPath(raw)) || "Folder"}]: `)).trim() || path.basename(expandPath(raw)) || "Folder";
           await prepare(raw);
           const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "folder";
           let id = base;

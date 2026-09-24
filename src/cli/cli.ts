@@ -181,6 +181,8 @@ async function cmdTargets(p: Parsed, io: CliIO): Promise<number> {
   return EXIT.OK;
 }
 
+const MAX_EXTRA_FOLDERS = 6;
+
 async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
   const sub = p.positionals[1];
   if (sub === "path") {
@@ -199,26 +201,56 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
       io.out("SyncDrop copies files into a folder that Syncthing already syncs.");
       folder = (await io.ask("Path of that folder [~/SyncDrop]: ")).trim() || "~/SyncDrop";
     }
-    let created = false;
-    if (folder) {
-      const dir = expandPath(folder);
-      if (!path.isAbsolute(dir)) throw new ArgsError(`--path must be absolute or start with ~ (got '${folder}')`);
+    // Validate (and offer to create) a folder; returns true if it was created.
+    const prepare = async (raw: string): Promise<boolean> => {
+      const dir = expandPath(raw);
+      if (!path.isAbsolute(dir)) throw new ArgsError(`path must be absolute or start with ~ (got '${raw}')`);
       const info = await stat(dir).catch(() => undefined);
       if (info && !info.isDirectory()) throw new ArgsError(`${dir} exists but is not a folder`);
-      if (!info) {
-        const yes = io.interactive ? /^y/i.test((await io.ask(`${dir} does not exist. Create it? [Y/n]: `)).trim() || "y") : false;
-        if (yes) {
-          await mkdir(dir, { recursive: true });
-          created = true;
-        } else {
-          io.err(`warning: ${dir} does not exist yet; create it before using SyncDrop`);
+      if (info) return false;
+      const yes = io.interactive ? /^y/i.test((await io.ask(`${dir} does not exist. Create it? [Y/n]: `)).trim() || "y") : false;
+      if (yes) {
+        await mkdir(dir, { recursive: true });
+        return true;
+      }
+      io.err(`warning: ${dir} does not exist yet; create it before using SyncDrop`);
+      return false;
+    };
+    let created = false;
+    if (folder) created = await prepare(folder);
+    let mainName = "Main Sync";
+    const extras: Record<string, { name: string; path: string }> = {};
+    if (folder && io.interactive && !p.flags.has("path")) {
+      io.out("This name is what you will see in the right-click menu.");
+      mainName = (await io.ask(`Name for this folder [${mainName}]: `)).trim() || mainName;
+      const more = /^y/i.test((await io.ask("Add more folders to SyncDrop? [y/N]: ")).trim());
+      if (more) {
+        let count = 0;
+        while (count < 1 || count > MAX_EXTRA_FOLDERS) {
+          const n = Number((await io.ask(`How many more folders (1-${MAX_EXTRA_FOLDERS})? `)).trim());
+          count = Number.isInteger(n) ? n : 0;
+          if (count < 1 || count > MAX_EXTRA_FOLDERS) io.out(`Please enter a number from 1 to ${MAX_EXTRA_FOLDERS}.`);
+        }
+        const used = new Set<string>(["main"]);
+        for (let i = 1; i <= count; i++) {
+          io.out(`Folder ${i} of ${count}`);
+          let raw = "";
+          while (!raw) raw = (await io.ask("  Path of the folder: ")).trim();
+          const name = (await io.ask(`  Name shown in the menu [${path.basename(expandPath(raw)) || "Folder"}]: `)).trim() || path.basename(expandPath(raw)) || "Folder";
+          await prepare(raw);
+          const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "folder";
+          let id = base;
+          for (let k = 2; used.has(id); k++) id = `${base}-${k}`;
+          used.add(id);
+          extras[id] = { name, path: raw };
         }
       }
     }
-    await writeDefaultConfig(file, p.flags.has("force"), folder || undefined);
+    await writeDefaultConfig(file, p.flags.has("force"), folder || undefined, mainName, extras);
     io.out(`created ${file}`);
     if (folder) {
-      io.out(`target 'main' -> ${folder}${created ? " (folder created)" : ""}`);
+      io.out(`target 'main' ("${mainName}") -> ${folder}${created ? " (folder created)" : ""}`);
+      for (const [id, t] of Object.entries(extras)) io.out(`target '${id}' ("${t.name}") -> ${t.path}`);
       io.out("Make sure Syncthing shares this folder. Check with: syncdrop targets");
     } else {
       io.out("Edit the target paths so they match folders Syncthing syncs, then run: syncdrop targets");

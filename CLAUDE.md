@@ -9,10 +9,10 @@ into a directory that Syncthing already syncs.
 Do NOT describe it as "a Syncthing extension". Syncthing is only the first backend.
 
 ## Status
-v0.1.0 built: core, CLI, and Thunar/Caja/Dolphin/Nautilus install generators. 73 automated tests pass.
+v0.1.1 built: core, CLI, and Thunar/Caja/Dolphin/Nautilus install generators. 74 automated tests pass.
 Verified: core, CLI, generated file syntax (python, XML). NOT verified in a real file manager
 (Thunar/Caja/Dolphin/Nautilus menus) or across two Syncthing machines. Keep marking these untested.
-Install: single-file Node SEA binary (`scripts/build-binary.mjs`) + `packaging/linux/install.sh` + `syncdrop setup`; release workflow in `.github/workflows/release.yml` ran green and published v0.1.0 (Linux x64 only; also has a manual dry-run via `workflow_dispatch`; tag must match `package.json` version). Extras beyond spec: `--notify`, `setup`, `config init` (prompts for the sync folder; `--path` skips the prompt), `integrate` command, `uninstall [--purge]`, `cli/main.ts` entry, JSONL history.
+Install: single-file Node SEA binary (`scripts/build-binary.mjs`) + `packaging/linux/install.sh` + `syncdrop setup`; release workflow in `.github/workflows/release.yml` ran green and published v0.1.0 (Linux x64 only; also has a manual dry-run via `workflow_dispatch`; tag must match `package.json` version). Extras beyond spec: `--notify`, `setup`, `config init` (prompts for the sync folder, its menu name and up to 6 extra folders; `--path` skips the prompt), `integrate` command, `uninstall [--purge]`, `cli/main.ts` entry, JSONL history.
 
 ## Stack
 - TypeScript on current LTS Node.js (declare in `package.json` `engines`), npm

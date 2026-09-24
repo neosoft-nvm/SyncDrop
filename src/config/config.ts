@@ -112,10 +112,19 @@ export async function loadConfig(file: string = configFilePath()): Promise<Confi
 }
 
 /** Write the default config, or one "main" target at `syncFolder`. Refuses to overwrite unless `force`. */
-export async function writeDefaultConfig(file: string = configFilePath(), force = false, syncFolder?: string): Promise<void> {
+export async function writeDefaultConfig(
+  file: string = configFilePath(),
+  force = false,
+  syncFolder?: string,
+  mainName = "Main Sync",
+  extraTargets: Record<string, { name: string; path: string }> = {},
+): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
+  const extras = Object.fromEntries(
+    Object.entries(extraTargets).map(([id, t]) => [id, { name: t.name, path: t.path, backend: "syncthing" as const }]),
+  );
   const config: ConfigFile = syncFolder
-    ? { ...DEFAULT_CONFIG, targets: { main: { name: "Main Sync", path: syncFolder, backend: "syncthing" } } }
+    ? { ...DEFAULT_CONFIG, targets: { main: { name: mainName, path: syncFolder, backend: "syncthing" }, ...extras } }
     : DEFAULT_CONFIG;
   try {
     await writeFile(file, JSON.stringify(config, null, 2) + "\n", { flag: force ? "w" : "wx" });

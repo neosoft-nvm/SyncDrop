@@ -2,11 +2,16 @@
 # SyncDrop installer. Run as your normal user (no sudo):
 #   curl -fsSL https://github.com/neosoft-nvm/SyncDrop/releases/latest/download/install.sh | sh
 # Set SYNCDROP_BINARY=/path/to/syncdrop to install a local build instead of downloading.
+# Set SYNCDROP_VERSION=v0.2.0-rc.1 to install a specific release (e.g. a pre-release) instead of the latest.
 set -eu
 
 BIN_DIR="${HOME}/.local/bin"
 TARGET="${BIN_DIR}/syncdrop"
-URL="https://github.com/neosoft-nvm/SyncDrop/releases/latest/download/syncdrop-linux-x64.gz"
+if [ -n "${SYNCDROP_VERSION:-}" ]; then
+  URL="https://github.com/neosoft-nvm/SyncDrop/releases/download/${SYNCDROP_VERSION}/syncdrop-linux-x64.gz"
+else
+  URL="https://github.com/neosoft-nvm/SyncDrop/releases/latest/download/syncdrop-linux-x64.gz"
+fi
 
 if [ "$(id -u)" -eq 0 ]; then
   echo "Please run this as your normal user, not root/sudo." >&2

@@ -37,4 +37,4 @@ jobs:
       - if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/syncdrop-linux-x64.gz release/install.sh --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" release/syncdrop-linux-x64.gz release/install.sh --generate-notes $(case "$GITHUB_REF_NAME" in *-*) echo --prerelease;; esac)

@@ -4,7 +4,7 @@ A cross-platform file-to-sync-target utility with file-manager integrations.
 
 **Select → Right-click → SyncDrop → Target → File appears in your synchronized folder.**
 
-> **Status: v0.2.1-rc.1 (pre-release for testing).** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 91 automated tests. The file-manager menus (including the new Copy / Move / Link entries, the Settings item and the terminal launch) have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
+> **Status: v0.2.2-rc.1 (pre-release for testing).** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 94 automated tests. The file-manager menus (including the new Copy / Move / Link entries, the Settings item and the terminal launch) have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
 
 ## What it does
 
@@ -49,11 +49,11 @@ Per-user JSON file. Linux: `~/.config/syncdrop/`. Run `syncdrop config path` to 
     "projects": { "name": "Projects",  "path": "~/SyncDrop/Projects",  "backend": "syncthing" }
   },
   "defaults": { "operation": "copy", "target": "main", "conflict": "ask" },
-  "menu": { "operations": ["copy", "move", "link"], "order": ["projects", "main"] }
+  "menu": { "order": ["projects", "main"], "ctrlMove": true, "shiftLink": true, "explicitEntries": false }
 }
 ```
 
-- `menu.operations`: which actions each folder offers in the right-click menu, in that order (`copy`, `move`, `link`). Default: all three.
+- The menu has one entry per folder ("Copy to Projects"). In Nautilus and Caja, hold **Ctrl** while clicking it to move instead of copy (`menu.ctrlMove`), or **Shift** to make a link (`menu.shiftLink`); with both held a link is made. Both default to on; any key you don't press means copy. Thunar and Dolphin can't see held keys, so `menu.explicitEntries: true` adds separate "Move to" / "Link to" entries there (default off).
 - `menu.order`: order of the folders in the menu. Folders not listed follow in file order.
 - `link` puts a symbolic link (a shortcut) to the original in the target folder instead of a copy. Syncthing syncs the link itself, not the file it points to, so other devices only get a working shortcut if the original exists at the same path there.
 
@@ -80,7 +80,7 @@ syncdrop target add Photos --path ~/Photos         # add a folder to the menu
 syncdrop target move photos 1                      # menu position (1 = first)
 syncdrop target rename photos "My Photos"
 syncdrop target remove photos                      # never touches the folder on disk
-syncdrop config set menu copy,link                 # which actions the menu offers, in order
+syncdrop config set ctrl-move|shift-link|extra-entries yes|no   # modifier keys / Thunar+Dolphin extra entries
 syncdrop config set operation|conflict|target VALUE
 syncdrop menu [--json]                             # entries the file managers show
 syncdrop history -n 10

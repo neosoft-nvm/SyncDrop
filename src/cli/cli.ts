@@ -6,8 +6,8 @@ import { isSea } from "node:sea";
 import readline from "node:readline";
 import { loadConfig, writeDefaultConfig } from "../config/config.js";
 import { CONFLICT_POLICIES, OPERATIONS, type Config, type ConflictPolicy, type Operation } from "../config/types.js";
-import { addTarget, isOperation, makeTargetId, moveTarget, removeTarget, renameTarget, setDefaults, setMenuOperations } from "../config/edit.js";
-import { menuEntries } from "../core/menu.js";
+import { addTarget, isOperation, makeTargetId, moveTarget, removeTarget, renameTarget, setDefaults, setMenuOptions } from "../config/edit.js";
+import { menuModel } from "../core/menu.js";
 import { adapterContext, refreshMenus } from "./menus.js";
 import { askFolderName, askFolderPath, prepareFolder, type KnownFolder } from "./folder-input.js";
 import { heading, isYes } from "./ui.js";
@@ -42,9 +42,9 @@ Commands:
   targets, target list        List configured targets in menu order (--json for machine output)
   target add NAME --path <dir>   Add a folder to the menu   (--id <id> to choose the id)
   target remove|rename|move ...  target remove ID | target rename ID NAME | target move ID POSITION
-  menu [--json]               Show the menu entries file managers display
-  settings                    Change defaults, menu items and their order, and file-manager integration
-  config set <key> <value>    key: operation | conflict | target | menu (e.g. menu copy,move,link)
+  menu [--json]               Show what the file-manager menus display and what Ctrl / Shift do
+  settings                    Change defaults, folder order, Ctrl/Shift keys, folders and file-manager integration
+  config set <key> <value>    key: operation | conflict | target | ctrl-move | shift-link | extra-entries (yes/no)
   add FILE...                 Copy or move files/folders into a target
       -t, --target <id>         Target id (default: config defaults.target)
       -o, --operation <op>      copy | move | link     (default: config; link = shortcut to the original)
@@ -164,7 +164,7 @@ async function cmdAdd(p: Parsed, io: CliIO, logger: ReturnType<typeof createLogg
     const target = config.targets[targetId]?.name ?? targetId;
     io.notify(
       failed.length ? "SyncDrop: some items failed" : "SyncDrop",
-      failed.length ? failed.map((r) => r.error).join("\n") : `${results.length} item(s) sent to ${target}`,
+      failed.length ? failed.map((r) => r.error).join("\n") : `${results.length} item(s) ${operation === "move" ? "moved" : operation === "link" ? "linked" : "copied"} to ${target}`,
     );
   }
   if (failed.length === 0) return EXIT.OK;
@@ -287,9 +287,14 @@ async function cmdHistory(p: Parsed, io: CliIO): Promise<number> {
 }
 
 async function cmdMenu(p: Parsed, io: CliIO): Promise<number> {
-  const entries = menuEntries(await loadConfig());
-  if (p.flags.has("json")) io.out(JSON.stringify(entries, null, 2));
-  else entries.forEach((e) => io.out(e.label));
+  const model = menuModel(await loadConfig());
+  if (p.flags.has("json")) {
+    io.out(JSON.stringify(model, null, 2));
+    return EXIT.OK;
+  }
+  model.folders.forEach((f) => io.out(f.label));
+  io.out(`Hold Ctrl: ${model.modifiers.ctrl ?? "off"}   Hold Shift: ${model.modifiers.shift ?? "off"}`);
+  if (model.extraOperations.length) io.out(`Thunar/Dolphin also list: ${model.extraOperations.join(", ")}`);
   return EXIT.OK;
 }
 
@@ -330,7 +335,7 @@ async function cmdTargetEdit(p: Parsed, io: CliIO): Promise<number> {
 
 async function cmdConfigSet(p: Parsed, io: CliIO): Promise<number> {
   const [, , key, value] = p.positionals;
-  if (!key || !value) throw new ArgsError("config set: usage: config set <operation|conflict|target|menu> <value>");
+  if (!key || !value) throw new ArgsError("config set: usage: config set <operation|conflict|target|ctrl-move|shift-link|extra-entries> <value>");
   let updated: Config;
   if (key === "operation") {
     if (!isOperation(value)) throw new ArgsError(`operation must be one of: ${OPERATIONS.join(", ")}`);
@@ -340,10 +345,10 @@ async function cmdConfigSet(p: Parsed, io: CliIO): Promise<number> {
     updated = await setDefaults({ conflict: value as ConflictPolicy });
   } else if (key === "target") {
     updated = await setDefaults({ target: value });
-  } else if (key === "menu") {
-    const ops = value.split(",").map((s) => s.trim());
-    if (!ops.every(isOperation)) throw new ArgsError(`menu: use a comma-separated list of: ${OPERATIONS.join(", ")}`);
-    updated = await setMenuOperations(ops);
+  } else if (key === "ctrl-move" || key === "shift-link" || key === "extra-entries") {
+    if (!/^(yes|no|y|n|true|false|on|off)$/i.test(value)) throw new ArgsError(`${key}: use yes or no`);
+    const on = /^(yes|y|true|on)$/i.test(value);
+    updated = await setMenuOptions(key === "ctrl-move" ? { ctrlMove: on } : key === "shift-link" ? { shiftLink: on } : { explicitEntries: on });
   } else {
     throw new ArgsError(`config set: unknown key '${key}'`);
   }

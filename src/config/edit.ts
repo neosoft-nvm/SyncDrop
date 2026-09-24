@@ -73,10 +73,15 @@ export const setDefaults = (d: { operation?: Operation; conflict?: ConflictPolic
     raw.defaults = { ...raw.defaults, ...d };
   }, file);
 
-/** Set which operations the menus offer; the order given is the menu order. */
-export const setMenuOperations = (ops: Operation[], file?: string) =>
+export interface MenuFlags {
+  ctrlMove?: boolean;
+  shiftLink?: boolean;
+  explicitEntries?: boolean;
+}
+
+export const setMenuOptions = (flags: MenuFlags, file?: string) =>
   editConfig((raw) => {
-    raw.menu = { ...raw.menu, operations: ops };
+    raw.menu = { ...raw.menu, ...flags };
   }, file);
 
 export const isOperation = (s: string): s is Operation => (OPERATIONS as readonly string[]).includes(s);

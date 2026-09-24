@@ -39,15 +39,26 @@ describe("standalone binary (no script)", () => {
 });
 
 describe("menu settings", () => {
-  it("offers only the chosen operations, in the chosen order, and the given target order", () => {
-    const c: AdapterContext = { ...ctx, targets: [...ctx.targets].reverse(), operations: ["link", "copy"] };
+  it("lists only Copy by default; Move / Link entries appear only when asked for (Thunar, Dolphin)", () => {
+    expect(buildServiceMenu(ctx)).not.toContain("Move to");
+    const c: AdapterContext = { ...ctx, targets: [...ctx.targets].reverse(), extraOperations: ["move", "link"] };
     const xml = buildActions(c);
     expect(xml.match(/<name>SyncDrop: [^<]*/g)).toEqual([
-      "<name>SyncDrop: Link to Docs &amp; Notes", "<name>SyncDrop: Copy to Docs &amp; Notes",
-      "<name>SyncDrop: Link to Main Sync", "<name>SyncDrop: Copy to Main Sync", "<name>SyncDrop: Settings",
+      "<name>SyncDrop: Copy to Docs &amp; Notes", "<name>SyncDrop: Move to Docs &amp; Notes", "<name>SyncDrop: Link to Docs &amp; Notes",
+      "<name>SyncDrop: Copy to Main Sync", "<name>SyncDrop: Move to Main Sync", "<name>SyncDrop: Link to Main Sync", "<name>SyncDrop: Settings",
     ]);
-    expect(buildServiceMenu(c)).not.toContain("Move to");
-    expect(buildServiceMenu(c)).toContain("--operation");
+    expect(buildServiceMenu(c)).toContain("Move to Main Sync");
+  });
+
+  it("nautilus and caja read the held keys at click time and pick the GTK generation matching the file manager", () => {
+    for (const py of [buildExtension(ctx), buildCaja(ctx)]) {
+      expect(py).toContain("_held()");
+      expect(py).toContain("CONTROL_MASK");
+      expect(py).toContain('if shift and modifiers.get("shift")');
+    }
+    expect(buildExtension(ctx)).toContain('_VER = "4.0"');
+    expect(buildCaja(ctx)).toContain('_VER = "2.0"');
+    expect(buildCaja(ctx)).toContain('gi.require_version("Gdk", "3.0")');
   });
 
   it("adapters report whether they are installed", async () => {
@@ -63,11 +74,11 @@ describe("menu settings", () => {
 describe("thunar", () => {
   it("builds one escaped action per target passing %F", () => {
     const xml = buildActions(ctx);
-    // 2 targets x (copy, move, link) + Settings
-    expect(xml.match(/<action>/g)).toHaveLength(7);
-    expect(xml).toContain("SyncDrop: Link to Docs &amp; Notes");
+    // one Copy entry per target + Settings
+    expect(xml.match(/<action>/g)).toHaveLength(3);
+    expect(xml).toContain("SyncDrop: Copy to Docs &amp; Notes");
     expect(xml).toContain("SyncDrop: Settings");
-    expect(xml).toContain('add --target main --operation move --conflict keep-both --notify -- %F');
+    expect(xml).toContain('add --target main --operation copy --conflict keep-both --notify -- %F');
     expect(xml).toContain("&quot;/opt/my apps/syncdrop/dist/cli/main.js&quot;");
     expect(xml).toContain("<directories/>");
   });
@@ -82,7 +93,7 @@ describe("thunar", () => {
     await adapter.install();
     expect(await readFile(uca, "utf8")).toBe(once);
     expect(once).toContain("Open Terminal");
-    expect(once.match(/<unique-id>syncdrop-/g)).toHaveLength(7);
+    expect(once.match(/<unique-id>syncdrop-/g)).toHaveLength(3);
     expect((await stat(uca + ".syncdrop.bak")).isFile()).toBe(true);
 
     await adapter.uninstall();
@@ -102,10 +113,10 @@ describe("dolphin", () => {
   it("builds a submenu service menu with an action per target", () => {
     const d = buildServiceMenu(ctx);
     expect(d).toContain("X-KDE-Submenu=SyncDrop");
-    expect(d).toContain("Actions=syncdrop-0-main-copy;syncdrop-1-main-move;syncdrop-2-main-link;syncdrop-3-docs-copy;");
-    expect(d).toContain("[Desktop Action syncdrop-3-docs-copy]");
+    expect(d).toContain("Actions=syncdrop-0-main-copy;syncdrop-1-docs-copy;syncdrop-settings;");
+    expect(d).toContain("[Desktop Action syncdrop-1-docs-copy]");
     expect(d).toContain("[Desktop Action syncdrop-settings]");
-    expect(d).toContain("Name=Move to Docs & Notes");
+    expect(d).toContain("Name=Copy to Docs & Notes");
     expect(d).toMatch(/Exec=.*"add" "--target" "main".*%F/);
   });
   it("installs an executable file and uninstalls it", async () => {

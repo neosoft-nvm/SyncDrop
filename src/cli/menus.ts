@@ -1,3 +1,4 @@
+import { menuModel } from "../core/menu.js";
 import type { Config } from "../config/types.js";
 import { describeError } from "../core/errors.js";
 import { defaultCli } from "../platforms/common.js";
@@ -8,7 +9,7 @@ import type { CliIO } from "./cli.js";
 export const adapterContext = (config: Config): AdapterContext => ({
   cli: defaultCli(),
   targets: config.order.map((id) => config.targets[id] as Config["targets"][string]),
-  operations: config.menu.operations,
+  extraOperations: menuModel(config).extraOperations,
 });
 
 /** Rewrite the menus of file managers that already have SyncDrop entries (Nautilus/Caja read the config live). */

@@ -39,7 +39,7 @@ Not sure which you use? Run `echo $SHELL`. Many systems add `~/.local/bin` to PA
 
 ## Use it
 
-Right-click a file or folder, choose **SyncDrop**, then pick an action and a folder: **Copy to…**, **Move to…** (removes the original after copying) or **Link to…** (puts a shortcut to the original in that folder instead of a copy). You'll get a small notification when it's done, and Syncthing does the rest.
+Right-click a file or folder, choose **SyncDrop**, then click **Copy to** and the folder you want. Hold **Ctrl** while you click to **move** the file instead (the original is removed after it is copied), or hold **Shift** to make a **link** (a shortcut to the original instead of a copy). This works in Nautilus and Caja; Thunar and Dolphin can't see held keys, so switch on "list Move / Link entries too" in Settings › Modifier keys if you want those two there. You'll get a small notification when it's done, and Syncthing does the rest.
 
 If a file with the same name is already there, SyncDrop keeps both (`report.pdf` and `report (1).pdf`). It never overwrites anything.
 
@@ -48,7 +48,8 @@ If a file with the same name is already there, SyncDrop keeps both (`report.pdf`
 Right-click, choose **SyncDrop**, then **Settings** (or run `syncdrop settings` in a terminal). There you can:
 
 - pick the default action and what to do when a file already exists,
-- choose which of Copy / Move / Link appear, and put them in the order you like,
+- turn the **Ctrl = move** and **Shift = link** keys on or off (Settings › Modifier keys),
+- put your folders in the order you like (Settings › Menu order),
 - add, rename, remove and re-order your folders (the list of your folders is shown first, and you can type a folder's number or its name),
 - add or remove the SyncDrop menu in each file manager on this computer.
 

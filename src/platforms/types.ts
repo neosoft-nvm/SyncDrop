@@ -1,5 +1,5 @@
 import { menuLabel } from "../core/menu.js";
-import { OPERATIONS, type Operation, SyncTarget } from "../config/types.js";
+import type { Operation, SyncTarget } from "../config/types.js";
 
 /**
  * How file-manager entries invoke SyncDrop: `<node> <script> <args...>`,
@@ -21,8 +21,8 @@ export interface AdapterContext {
   cli: CliInvocation;
   /** Targets in menu order. */
   targets: SyncTarget[];
-  /** Operations offered per target, in menu order (default: all). */
-  operations?: Operation[];
+  /** Extra per-folder entries besides Copy (Thunar/Dolphin cannot see Ctrl/Shift). Default: none. */
+  extraOperations?: Operation[];
 }
 
 export interface MenuItem {
@@ -33,7 +33,7 @@ export interface MenuItem {
 
 /** Flat, ordered list of menu items for adapters whose menus are generated at install time. */
 export function menuItems(ctx: AdapterContext): MenuItem[] {
-  const ops = ctx.operations ?? OPERATIONS;
+  const ops: Operation[] = ["copy", ...(ctx.extraOperations ?? [])];
   return ctx.targets.flatMap((target) => ops.map((operation) => ({ target, operation, label: menuLabel(operation, target.name) })));
 }
 

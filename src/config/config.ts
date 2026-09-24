@@ -82,15 +82,12 @@ export function validateConfig(raw: unknown): Result<Config, string[]> {
   if (target && !(target in targets) && errors.length === 0) errors.push(`defaults.target '${target}' is not a defined target`);
 
   const m = isObject(raw.menu) ? raw.menu : {};
-  let menuOps: Operation[] = [...OPERATIONS];
-  if (m.operations !== undefined) {
-    const list = m.operations;
-    if (!Array.isArray(list) || list.length === 0 || list.some((o) => !OPERATIONS.includes(o as Operation)) || new Set(list).size !== list.length) {
-      errors.push(`menu.operations must be a non-empty list without repeats of: ${OPERATIONS.join(", ")}`);
-    } else {
-      menuOps = list as Operation[];
-    }
-  }
+  const flag = (key: "ctrlMove" | "shiftLink" | "explicitEntries", fallback: boolean): boolean => {
+    if (m[key] === undefined) return fallback;
+    if (typeof m[key] !== "boolean") errors.push(`menu.${key} must be true or false`);
+    return m[key] === true;
+  };
+  const menu = { ctrlMove: flag("ctrlMove", true), shiftLink: flag("shiftLink", true), explicitEntries: flag("explicitEntries", false) };
   const wanted = m.order === undefined ? [] : Array.isArray(m.order) && m.order.every((x) => typeof x === "string") ? (m.order as string[]) : null;
   if (wanted === null) errors.push("menu.order must be a list of target ids");
   // Listed ids first (unknown ones are ignored), then any target not listed, in file order.
@@ -101,7 +98,7 @@ export function validateConfig(raw: unknown): Result<Config, string[]> {
     version: raw.version as number,
     targets,
     defaults: { operation, conflict, target },
-    menu: { operations: menuOps },
+    menu,
     order,
     raw: raw as Config["raw"],
   });

@@ -1,5 +1,5 @@
 import { loadConfig } from "../config/config.js";
-import { addTarget, isOperation, makeTargetId, moveTarget, removeTarget, renameTarget, setDefaults, setMenuOperations } from "../config/edit.js";
+import { addTarget, makeTargetId, moveTarget, removeTarget, renameTarget, setDefaults, setMenuOptions, type MenuFlags } from "../config/edit.js";
 import { CONFLICT_POLICIES, OPERATIONS, type Config, type Operation } from "../config/types.js";
 import { ArgsError, EXIT, describeError } from "../core/errors.js";
 import { ADAPTER_NAMES, createAdapter } from "../platforms/registry.js";
@@ -108,27 +108,32 @@ async function orderScreen(io: CliIO, st: State): Promise<void> {
     io.out("Folders appear in this order in the right-click menu:");
     showFolders(io, st.config, false);
     io.out("");
-    io.out(`Each folder offers: ${st.config.menu.operations.map((o) => OP_NAME[o].split(" ")[0]).join(", ")}`);
-    io.out("");
-    const pick = await menu(io, [{ label: "Change the order of the folders" }, { label: "Choose which actions are offered (Copy / Move / Link) and their order" }], "Back");
+    const pick = await menu(io, [{ label: "Change the order of the folders" }], "Back");
     if (pick === null) return;
-    if (pick === 0) await reorder(io, st);
-    else await chooseActions(io, st);
+    await reorder(io, st);
   }
 }
 
-async function chooseActions(io: CliIO, st: State): Promise<void> {
-  heading(io, "Actions in the menu");
-  io.out("Type the actions you want, in the order you want them, separated by commas.");
-  io.out("Choose from: copy, move, link      Example: copy,link");
-  const raw = (await io.ask(`Actions [${st.config.menu.operations.join(",")}] (Enter to keep): `)).trim();
-  if (!raw) return;
-  const ops = raw.toLowerCase().split(/[\s,]+/).filter(Boolean);
-  if (!ops.every(isOperation) || new Set(ops).size !== ops.length) {
-    io.err(`Use only ${OPERATIONS.join(", ")}, each at most once.`);
-    return;
+const yn = (b: boolean) => (b ? "yes" : "no");
+
+async function keysScreen(io: CliIO, st: State): Promise<void> {
+  for (;;) {
+    const m = st.config.menu;
+    heading(io, "Modifier keys");
+    io.out("Hold a key while you click a folder in the SyncDrop menu to change what happens.");
+    io.out("Without a key, files are copied. (If both keys are held, a link is made.)");
+    io.out("Nautilus and Caja can see held keys. Thunar and Dolphin cannot.");
+    io.out("");
+    const keys: { label: string; flag: keyof MenuFlags }[] = [
+      { label: `Hold Ctrl to MOVE instead of copy:                  ${yn(m.ctrlMove)}`, flag: "ctrlMove" },
+      { label: `Hold Shift to make a LINK (shortcut) instead:       ${yn(m.shiftLink)}`, flag: "shiftLink" },
+      { label: `Thunar and Dolphin: list Move / Link entries too:   ${yn(m.explicitEntries)}`, flag: "explicitEntries" },
+    ];
+    const pick = await menu(io, keys, "Back", "Type a number to switch it yes/no");
+    if (pick === null) return;
+    const flag = (keys[pick] as (typeof keys)[number]).flag;
+    await apply(io, st, () => setMenuOptions({ [flag]: !m[flag] }), "Saved.");
   }
-  await apply(io, st, () => setMenuOperations(ops as Operation[]), "Saved.");
 }
 
 async function reorder(io: CliIO, st: State): Promise<void> {
@@ -223,13 +228,13 @@ export async function runSettings(io: CliIO): Promise<number> {
     heading(io, "SyncDrop Settings");
     const pick = await menu(
       io,
-      [{ label: "Defaults" }, { label: "Menu order" }, { label: "Folders  (add, remove, rename, reorder)" }, { label: "File managers  (add or remove the menu)" }],
+      [{ label: "Defaults" }, { label: "Menu order" }, { label: "Modifier keys  (Ctrl = move, Shift = link)" }, { label: "Folders  (add, remove, rename, reorder)" }, { label: "File managers  (add or remove the menu)" }],
       "Quit SyncDrop Settings",
     );
     if (pick === null) {
       io.out("Settings closed. Restart your file manager to see any changes.");
       return EXIT.OK;
     }
-    await [defaultsScreen, orderScreen, foldersScreen, managersScreen][pick]?.(io, st);
+    await [defaultsScreen, orderScreen, keysScreen, foldersScreen, managersScreen][pick]?.(io, st);
   }
 }

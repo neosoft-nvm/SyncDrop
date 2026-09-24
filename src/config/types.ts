@@ -18,8 +18,12 @@ export interface SyncTarget {
 
 /** Which entries the file-manager menus show, and in what order. */
 export interface MenuSettings {
-  /** Operations offered for every target, in menu order. */
-  operations: Operation[];
+  /** Holding Ctrl while choosing a folder moves instead of copies (Nautilus, Caja). */
+  ctrlMove: boolean;
+  /** Holding Shift while choosing a folder links instead of copies (Nautilus, Caja). */
+  shiftLink: boolean;
+  /** Thunar and Dolphin cannot see held keys: list separate Move / Link entries there. */
+  explicitEntries: boolean;
 }
 
 export interface Defaults {
@@ -33,7 +37,7 @@ export interface ConfigFile {
   version: number;
   targets: Record<string, { name: string; path: string; backend: string; [k: string]: unknown }>;
   defaults?: Partial<Defaults>;
-  menu?: { operations?: string[]; order?: string[]; [k: string]: unknown };
+  menu?: { order?: string[]; ctrlMove?: boolean; shiftLink?: boolean; explicitEntries?: boolean; [k: string]: unknown };
   [k: string]: unknown;
 }
 

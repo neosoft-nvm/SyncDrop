@@ -208,8 +208,8 @@ describe("cli", () => {
     process.env.XDG_CONFIG_HOME = path.join(root, "xc");
     process.env.XDG_DATA_HOME = path.join(root, "xd");
     await run(["target", "add", "Photos", "--path", path.join(root, "p")], fakeIO().io);
-    // 3 Folders > 2 Remove > "photos" > y > 0 back > 0 quit
-    const c = fakeIO({ interactive: true, answers: ["3", "2", "photos", "y", "0", "0"] });
+    // 4 Folders > 2 Remove > "photos" > y > 0 back > 0 quit
+    const c = fakeIO({ interactive: true, answers: ["4", "2", "photos", "y", "0", "0"] });
     expect(await run(["settings"], c.io)).toBe(0);
     const out = c.out.join("\n");
     expect(out).toContain("1. Main Sync");
@@ -314,21 +314,42 @@ describe("cli", () => {
       expect(await run(["target", "remove", "docs"], fakeIO().io)).toBe(3); // last one is protected
     });
 
-    it("menu lists entries in the configured order and honours config set menu", async () => {
-      expect(await run(["config", "set", "menu", "link,copy"], fakeIO().io)).toBe(0);
+    it("menu shows one Copy entry per folder plus what Ctrl and Shift do; config set changes it", async () => {
+      const cfg = () => read(process.env.SYNCDROP_CONFIG as string).then((t) => JSON.parse(t));
       const c = fakeIO();
       await run(["menu"], c.io);
-      expect(c.out).toEqual(["Link to Main Sync", "Copy to Main Sync"]);
-      expect(await run(["config", "set", "menu", "copy,teleport"], fakeIO().io)).toBe(2);
+      expect(c.out).toEqual(["Copy to Main Sync", "Hold Ctrl: move   Hold Shift: link"]);
+      expect(await run(["config", "set", "ctrl-move", "no"], fakeIO().io)).toBe(0);
+      expect(await run(["config", "set", "shift-link", "off"], fakeIO().io)).toBe(0);
+      const j = fakeIO();
+      await run(["menu", "--json"], j.io);
+      expect(JSON.parse(j.out.join("\n")).modifiers).toEqual({ ctrl: null, shift: null });
+      expect((await cfg()).menu).toEqual({ ctrlMove: false, shiftLink: false });
+      expect(await run(["config", "set", "ctrl-move", "maybe"], fakeIO().io)).toBe(2);
       expect(await run(["config", "set", "operation", "link"], fakeIO().io)).toBe(0);
-      expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG as string)).defaults.operation).toBe("link");
+      expect((await cfg()).defaults.operation).toBe("link");
     });
 
-    it("changing the menu refreshes menus that are already installed", async () => {
+    it("an old config with menu.operations still loads (the field is ignored and kept)", async () => {
+      const file = process.env.SYNCDROP_CONFIG as string;
+      const raw = JSON.parse(await read(file));
+      await writeFile(file, JSON.stringify({ ...raw, menu: { operations: ["link", "copy"] } }));
+      expect(await run(["menu"], fakeIO().io)).toBe(0);
+    });
+
+    it("changing menu options refreshes menus that are already installed", async () => {
       expect(await run(["integrate", "install", "dolphin"], fakeIO().io)).toBe(0);
-      expect(await run(["config", "set", "menu", "copy"], fakeIO().io)).toBe(0);
-      const desktop = await read(path.join(root, "xdg-data", "kio", "servicemenus", "syncdrop.desktop"));
-      expect(desktop).not.toContain("Move to");
+      const file = path.join(root, "xdg-data", "kio", "servicemenus", "syncdrop.desktop");
+      expect(await read(file)).not.toContain("Move to");
+      expect(await run(["config", "set", "extra-entries", "yes"], fakeIO().io)).toBe(0);
+      expect(await read(file)).toContain("Move to Main Sync");
+    });
+
+    it("settings: the Modifier keys screen switches Ctrl-move and Shift-link", async () => {
+      // 3 Modifier keys > 1 (Ctrl) > 2 (Shift) > 3 (extra entries) > back > quit
+      const c = fakeIO({ interactive: true, answers: ["3", "1", "2", "3", "0", "0"] });
+      expect(await run(["settings"], c.io)).toBe(0);
+      expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG as string)).menu).toEqual({ ctrlMove: false, shiftLink: false, explicitEntries: true });
     });
 
     it("settings needs a terminal, and edits defaults when there is one", async () => {

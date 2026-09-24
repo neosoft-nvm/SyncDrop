@@ -15,7 +15,7 @@ SyncDrop adds a **SyncDrop** option to your right-click menu. Pick a file or fol
    curl -fsSL https://github.com/neosoft-nvm/SyncDrop/releases/latest/download/install.sh | sh
    ```
 
-3. When it asks for your sync folder, type the folder's path (or press **Enter** to use `~/SyncDrop`). If the folder doesn't exist, say **Y** to create it. If you mistype a path, it tells you what's wrong and asks again; nothing is quit. Press **Enter** on an empty answer to skip an extra folder.
+3. If you already have SyncDrop settings, setup shows them and asks whether to **keep** them or **create new ones** (the old file is saved as a `.bak` copy first). Otherwise, when it asks for your sync folder, type the folder's path (or press **Enter** to use `~/SyncDrop`). If the folder doesn't exist, say **Y** to create it. If you mistype a path, it tells you what's wrong and asks again; nothing is quit. Press **Enter** on an empty answer to skip an extra folder. If a name or folder is already in your list, it tells you and asks whether to add it anyway.
    Next it asks what **name** to show in the right-click menu for that folder (Enter keeps the suggestion, which is the folder's own name, e.g. `~/Documents` suggests "Documents"). Then it asks whether you want to add more folders: answer **y**, say how many (1 to 6), and it walks you through each one (path, then menu name).
 4. Log out and back in, or restart your file manager.
 5. If the installer shows a red **WARNING about PATH**, read [If it says "PATH"](#if-it-says-path) below. It only affects typing `syncdrop` in a terminal, not the right-click menu.
@@ -49,10 +49,10 @@ Right-click, choose **SyncDrop**, then **Settings** (or run `syncdrop settings` 
 
 - pick the default action and what to do when a file already exists,
 - choose which of Copy / Move / Link appear, and put them in the order you like,
-- add, rename, remove and re-order your folders,
+- add, rename, remove and re-order your folders (the list of your folders is shown first, and you can type a folder's number or its name),
 - add or remove the SyncDrop menu in each file manager on this computer.
 
-Changes are saved right away. Restart your file manager to see them (Nautilus and Caja pick them up on their own). Removing a folder from the menu never deletes it on disk.
+Choose **0** to go back, and **0** on the first screen to quit Settings. Changes are saved right away. Restart your file manager to see them (Nautilus and Caja pick them up on their own). Removing a folder from the menu never deletes it on disk.
 
 ## If something goes wrong
 

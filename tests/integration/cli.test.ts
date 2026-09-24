@@ -130,7 +130,7 @@ describe("cli", () => {
     const [a, b, c2] = ["Videos", "Docs", "Docs2"].map((n) => path.join(root, n));
     const c = fakeIO({
       interactive: true,
-      answers: [a, "y", "Movies", "y", b, "y", "Papers", "y", c2, "y", "Papers", "n"],
+      answers: [a, "y", "Movies", "y", b, "y", "Papers", "y", c2, "y", "Papers", "y", "n"],
     });
     expect(await run(["config", "init"], c.io)).toBe(0);
     const t = JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets;
@@ -167,6 +167,55 @@ describe("cli", () => {
     const c = fakeIO({ interactive: true, answers: [main, "y", "", "y", "relative/dir", ""] });
     expect(await run(["config", "init"], c.io)).toBe(0);
     expect(Object.keys(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets)).toEqual(["main"]);
+  });
+
+  it("config init warns about a duplicate name or folder and lets the user decide", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const [m, d] = [path.join(root, "M"), path.join(root, "D")];
+    // second folder: same folder as the first (say no, then pick D), name "m" clashes with "M" (say no, then "Other")
+    const c = fakeIO({ interactive: true, answers: [m, "y", "M", "y", m, "n", d, "y", "m", "n", "Other", "n"] });
+    expect(await run(["config", "init"], c.io)).toBe(0);
+    const out = c.out.join("\n");
+    expect(out).toContain('already in the list as "M"');
+    expect(out).toContain('The name "m" is already used');
+    expect(Object.values(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets).map((t) => (t as { name: string }).name)).toEqual(["M", "Other"]);
+  });
+
+  it("setup offers to keep the current settings or create new ones (backing up the old)", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    process.env.XDG_CONFIG_HOME = path.join(root, "xc");
+    process.env.XDG_DATA_HOME = path.join(root, "xd");
+    const one = path.join(root, "One");
+    await run(["config", "init", "--path", one], fakeIO().io);
+    const keep = fakeIO({ interactive: true, answers: ["1"] });
+    await run(["setup"], keep.io);
+    expect(keep.out.join("\n")).toContain("Keeping your existing settings");
+    expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets.main.path).toBe(one);
+    const two = path.join(root, "Two");
+    const fresh = fakeIO({ interactive: true, answers: ["2", two, "y", "", "n"] });
+    await run(["setup"], fresh.io);
+    expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets.main.path).toBe(two);
+    expect(JSON.parse(await read(process.env.SYNCDROP_CONFIG + ".bak")).targets.main.path).toBe(one);
+  });
+
+  it("target add refuses a duplicate name or folder unless --force", async () => {
+    expect(await run(["target", "add", "main sync", "--path", path.join(root, "x")], fakeIO().io)).toBe(2);
+    expect(await run(["target", "add", "Other", "--path", dest], fakeIO().io)).toBe(2);
+    expect(await run(["target", "add", "main sync", "--path", path.join(root, "x"), "--force"], fakeIO().io)).toBe(0);
+  });
+
+  it("settings: shows the folder list when removing, accepts a name, and has a Quit option", async () => {
+    process.env.XDG_CONFIG_HOME = path.join(root, "xc");
+    process.env.XDG_DATA_HOME = path.join(root, "xd");
+    await run(["target", "add", "Photos", "--path", path.join(root, "p")], fakeIO().io);
+    // 3 Folders > 2 Remove > "photos" > y > 0 back > 0 quit
+    const c = fakeIO({ interactive: true, answers: ["3", "2", "photos", "y", "0", "0"] });
+    expect(await run(["settings"], c.io)).toBe(0);
+    const out = c.out.join("\n");
+    expect(out).toContain("1. Main Sync");
+    expect(out).toContain("2. Photos");
+    expect(out).toContain("Quit SyncDrop Settings");
+    expect(Object.keys(JSON.parse(await read(process.env.SYNCDROP_CONFIG as string)).targets)).toEqual(["main"]);
   });
 
   it("config init --path works without a terminal and warns if missing", async () => {

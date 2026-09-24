@@ -4,7 +4,7 @@ A cross-platform file-to-sync-target utility with file-manager integrations.
 
 **Select → Right-click → SyncDrop → Target → File appears in your synchronized folder.**
 
-> **Status: v0.2.0-rc.2 (pre-release for testing).** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 83 automated tests. The file-manager menus (including the new Copy / Move / Link entries, the Settings item and the terminal launch) have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
+> **Status: v0.2.1-rc.1 (pre-release for testing).** The core engine, CLI and Thunar/Caja/Dolphin/Nautilus integrations are implemented and the core is covered by 91 automated tests. The file-manager menus (including the new Copy / Move / Link entries, the Settings item and the terminal launch) have **not yet been tried in the real file managers**, and cross-machine Syncthing sync has not been validated. Treat those as untested.
 
 ## What it does
 

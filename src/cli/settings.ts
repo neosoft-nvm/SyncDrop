@@ -1,151 +1,235 @@
-import { mkdir, stat } from "node:fs/promises";
-import path from "node:path";
 import { loadConfig } from "../config/config.js";
 import { addTarget, isOperation, makeTargetId, moveTarget, removeTarget, renameTarget, setDefaults, setMenuOperations } from "../config/edit.js";
-import { CONFLICT_POLICIES, OPERATIONS, type Config, type ConflictPolicy, type Operation } from "../config/types.js";
+import { CONFLICT_POLICIES, OPERATIONS, type Config, type Operation } from "../config/types.js";
 import { ArgsError, EXIT, describeError } from "../core/errors.js";
-import { menuEntries } from "../core/menu.js";
 import { ADAPTER_NAMES, createAdapter } from "../platforms/registry.js";
-import { expandPath } from "../shared/paths.js";
 import type { CliIO } from "./cli.js";
+import { askFolderName, askFolderPath, type KnownFolder } from "./folder-input.js";
 import { adapterContext, refreshMenus } from "./menus.js";
+import { heading, isYes } from "./ui.js";
 
-/** Ask for a number 1..max. Returns null on Enter/EOF/anything else (meaning "back"). */
-async function askNumber(io: CliIO, question: string, max: number): Promise<number | null> {
-  const n = Number((await io.ask(question)).trim());
-  return Number.isInteger(n) && n >= 1 && n <= max ? n : null;
+const MAX_TRIES = 10;
+const CONFLICT_HELP: Record<string, string> = {
+  ask: "ask me each time",
+  overwrite: "replace the existing file",
+  skip: "leave the existing file alone",
+  "keep-both": "keep both (adds a number to the new name)",
+};
+const OP_NAME: Record<Operation, string> = { copy: "Copy", move: "Move", link: "Link (shortcut)" };
+
+interface Choice {
+  label: string;
 }
 
-const listTargets = (io: CliIO, c: Config) =>
-  c.order.forEach((id, i) => io.out(`  ${i + 1}) ${(c.targets[id] as { name: string }).name}  [${id}]  ${(c.targets[id] as { path: string }).path}`));
-
-async function chooseFrom<T extends string>(io: CliIO, title: string, options: readonly T[]): Promise<T | null> {
-  io.out(title);
-  options.forEach((o, i) => io.out(`  ${i + 1}) ${o}`));
-  const n = await askNumber(io, "Number (Enter to go back): ", options.length);
-  return n === null ? null : (options[n - 1] as T);
+/** Show numbered choices plus "0) <zero>" and return the 0-based index, or null for 0, Enter or end of input. */
+async function menu(io: CliIO, choices: Choice[], zero: string, question = "Choose a number"): Promise<number | null> {
+  choices.forEach((c, i) => io.out(`  ${i + 1}) ${c.label}`));
+  io.out(`  0) ${zero}`);
+  for (let i = 0; i < MAX_TRIES; i++) {
+    const a = (await io.ask(`${question}: `)).trim();
+    if (a === "" || a === "0") return null;
+    const n = Number(a);
+    if (Number.isInteger(n) && n >= 1 && n <= choices.length) return n - 1;
+    io.err(`Please type one of the numbers shown (0 to go back).`);
+  }
+  return null;
 }
 
-async function defaultsMenu(io: CliIO, c: Config): Promise<Config> {
-  io.out(`\nDefaults: operation=${c.defaults.operation}, conflict=${c.defaults.conflict}, target=${c.defaults.target}`);
-  const what = await chooseFrom(io, "Change which default?", ["operation", "conflict", "target"] as const);
-  if (what === "operation") {
-    const v = await chooseFrom(io, "Default operation (used by 'syncdrop add' when none is given):", OPERATIONS);
-    return v ? setDefaults({ operation: v }) : c;
-  }
-  if (what === "conflict") {
-    const v = await chooseFrom(io, "When a file already exists:", CONFLICT_POLICIES);
-    return v ? setDefaults({ conflict: v as ConflictPolicy }) : c;
-  }
-  if (what === "target") {
-    const v = await chooseFrom(io, "Default folder:", c.order);
-    return v ? setDefaults({ target: v }) : c;
-  }
-  return c;
+const nameOf = (c: Config, id: string) => (c.targets[id] as { name: string }).name;
+const known = (c: Config, except?: string): KnownFolder[] =>
+  c.order.filter((id) => id !== except).map((id) => ({ name: nameOf(c, id), path: (c.targets[id] as { path: string }).path }));
+
+function showFolders(io: CliIO, c: Config, withPaths: boolean): void {
+  c.order.forEach((id, i) => io.out(`  ${i + 1}. ${nameOf(c, id)}${withPaths ? `   (${(c.targets[id] as { path: string }).path})` : ""}`));
 }
 
-async function menuMenu(io: CliIO, c: Config): Promise<Config> {
-  io.out("\nWhat the right-click menu shows, in order:");
-  menuEntries(c).forEach((e, i) => io.out(`  ${i + 1}. ${e.label}`));
-  io.out("  then: Settings");
-  const what = await chooseFrom(io, "Change:", ["Which actions to offer (copy / move / link) and their order", "Order of the folders"] as const);
-  if (what?.startsWith("Which")) {
-    const raw = (await io.ask(`Actions in the order you want, comma separated, from ${OPERATIONS.join(", ")} [${c.menu.operations.join(",")}]: `)).trim();
-    if (!raw) return c;
-    const ops = raw.split(/[\s,]+/).filter(Boolean);
-    if (!ops.every(isOperation) || new Set(ops).size !== ops.length) {
-      io.err(`Use only ${OPERATIONS.join(", ")}, each once.`);
-      return c;
+/** Ask which folder, by number or by name. Returns its id, or null to cancel. */
+async function pickFolder(io: CliIO, c: Config, what: string): Promise<string | null> {
+  showFolders(io, c, true);
+  io.out("");
+  for (let i = 0; i < MAX_TRIES; i++) {
+    const a = (await io.ask(`Which folder do you want to ${what}? Type its number or name (Enter to cancel): `)).trim();
+    if (!a) return null;
+    const n = Number(a);
+    if (Number.isInteger(n) && n >= 1 && n <= c.order.length) return c.order[n - 1] as string;
+    const lower = a.toLowerCase();
+    const exact = c.order.filter((id) => nameOf(c, id).toLowerCase() === lower || id.toLowerCase() === lower);
+    const part = c.order.filter((id) => nameOf(c, id).toLowerCase().startsWith(lower));
+    const hit = exact.length === 1 ? exact : part.length === 1 ? part : [];
+    if (hit.length === 1) return hit[0] as string;
+    io.err(exact.length > 1 || part.length > 1 ? `More than one folder matches '${a}'; type its number.` : `No folder matches '${a}'.`);
+  }
+  return null;
+}
+
+type State = { config: Config };
+
+/** Run a change, save the result, refresh installed menus. Errors are shown, never fatal. */
+async function apply(io: CliIO, st: State, change: () => Promise<Config>, done: string): Promise<boolean> {
+  try {
+    st.config = await change();
+    io.out(done);
+    await refreshMenus(st.config, io);
+    return true;
+  } catch (e) {
+    io.err(`Could not do that: ${describeError(e)}`);
+    st.config = await loadConfig();
+    return false;
+  }
+}
+
+async function defaultsScreen(io: CliIO, st: State): Promise<void> {
+  for (;;) {
+    const d = st.config.defaults;
+    heading(io, "Defaults");
+    io.out(`  Action used when none is given (command line): ${OP_NAME[d.operation]}`);
+    io.out(`  When a file already exists:                     ${CONFLICT_HELP[d.conflict]}`);
+    io.out(`  Default folder:                                 ${nameOf(st.config, d.target)}`);
+    io.out("");
+    const pick = await menu(io, [{ label: "Change the default action" }, { label: "Change what happens when a file already exists" }, { label: "Change the default folder" }], "Back");
+    if (pick === null) return;
+    io.out("");
+    if (pick === 0) {
+      const v = await menu(io, OPERATIONS.map((o) => ({ label: `${OP_NAME[o]}${o === d.operation ? "  (current)" : ""}` })), "Cancel");
+      if (v !== null) await apply(io, st, () => setDefaults({ operation: OPERATIONS[v] as Operation }), "Saved.");
+    } else if (pick === 1) {
+      const v = await menu(io, CONFLICT_POLICIES.map((o) => ({ label: `${CONFLICT_HELP[o]}${o === d.conflict ? "  (current)" : ""}` })), "Cancel");
+      if (v !== null) await apply(io, st, () => setDefaults({ conflict: CONFLICT_POLICIES[v] as never }), "Saved.");
+    } else {
+      const v = await menu(io, st.config.order.map((id) => ({ label: `${nameOf(st.config, id)}${id === d.target ? "  (current)" : ""}` })), "Cancel");
+      if (v !== null) await apply(io, st, () => setDefaults({ target: st.config.order[v] as string }), "Saved.");
     }
-    return setMenuOperations(ops as Operation[]);
   }
-  if (what) return moveFolder(io, c);
-  return c;
 }
 
-async function moveFolder(io: CliIO, c: Config): Promise<Config> {
-  listTargets(io, c);
-  const from = await askNumber(io, "Move which folder (number)? ", c.order.length);
-  if (from === null) return c;
-  const to = await askNumber(io, `New position (1-${c.order.length})? `, c.order.length);
-  return to === null ? c : moveTarget(c.order[from - 1] as string, to);
+async function orderScreen(io: CliIO, st: State): Promise<void> {
+  for (;;) {
+    heading(io, "Menu order");
+    io.out("Folders appear in this order in the right-click menu:");
+    showFolders(io, st.config, false);
+    io.out("");
+    io.out(`Each folder offers: ${st.config.menu.operations.map((o) => OP_NAME[o].split(" ")[0]).join(", ")}`);
+    io.out("");
+    const pick = await menu(io, [{ label: "Change the order of the folders" }, { label: "Choose which actions are offered (Copy / Move / Link) and their order" }], "Back");
+    if (pick === null) return;
+    if (pick === 0) await reorder(io, st);
+    else await chooseActions(io, st);
+  }
 }
 
-async function foldersMenu(io: CliIO, c: Config): Promise<Config> {
-  io.out("\nFolders in the menu:");
-  listTargets(io, c);
-  const what = await chooseFrom(io, "Do what?", ["Add a folder", "Remove a folder", "Rename a folder", "Change order"] as const);
-  if (what === "Add a folder") {
-    const raw = (await io.ask("  Path of the folder (a folder Syncthing syncs): ")).trim();
-    if (!raw) return c;
-    const dir = expandPath(raw);
-    if (!path.isAbsolute(dir)) {
-      io.err("The path must be absolute or start with ~");
-      return c;
+async function chooseActions(io: CliIO, st: State): Promise<void> {
+  heading(io, "Actions in the menu");
+  io.out("Type the actions you want, in the order you want them, separated by commas.");
+  io.out("Choose from: copy, move, link      Example: copy,link");
+  const raw = (await io.ask(`Actions [${st.config.menu.operations.join(",")}] (Enter to keep): `)).trim();
+  if (!raw) return;
+  const ops = raw.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  if (!ops.every(isOperation) || new Set(ops).size !== ops.length) {
+    io.err(`Use only ${OPERATIONS.join(", ")}, each at most once.`);
+    return;
+  }
+  await apply(io, st, () => setMenuOperations(ops as Operation[]), "Saved.");
+}
+
+async function reorder(io: CliIO, st: State): Promise<void> {
+  if (st.config.order.length < 2) {
+    io.out("There is only one folder, so there is nothing to reorder.");
+    return;
+  }
+  heading(io, "Change the order of the folders");
+  const id = await pickFolder(io, st.config, "move");
+  if (!id) return;
+  const at = st.config.order.indexOf(id) + 1;
+  const to = Number((await io.ask(`Move "${nameOf(st.config, id)}" to which position (1-${st.config.order.length}, now ${at})? `)).trim());
+  if (!Number.isInteger(to) || to < 1 || to > st.config.order.length) {
+    io.err(`Please type a number from 1 to ${st.config.order.length}.`);
+    return;
+  }
+  if (await apply(io, st, () => moveTarget(id, to), "Saved. New order:")) showFolders(io, st.config, false);
+}
+
+async function foldersScreen(io: CliIO, st: State): Promise<void> {
+  for (;;) {
+    const c = st.config;
+    heading(io, "Folders");
+    io.out("Your folders:");
+    showFolders(io, c, true);
+    io.out("");
+    const pick = await menu(io, [{ label: "Add a folder" }, { label: "Remove a folder" }, { label: "Rename a folder" }, { label: "Change the order" }], "Back");
+    if (pick === null) return;
+    if (pick === 0) {
+      heading(io, "Add a folder");
+      const added = await askFolderPath(io, "Path of the folder (Enter to cancel): ", known(c)).catch((e) => (io.err(describeError(e)), null));
+      if (!added) continue;
+      const fb = added.raw.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || "Folder";
+      const name = await askFolderName(io, `Name shown in the menu [${fb}]: `, fb, known(c));
+      if (!name) continue;
+      await apply(io, st, () => addTarget(makeTargetId(name, c.order), name, added.raw), `Added "${name}" as number ${c.order.length + 1}. Use "Change the order" to move it.`);
+    } else if (pick === 1) {
+      heading(io, "Remove a folder");
+      if (c.order.length === 1) {
+        io.out("This is your only folder, so it can't be removed. Add another one first.");
+        continue;
+      }
+      const id = await pickFolder(io, c, "remove");
+      if (!id) continue;
+      io.out(`This only takes "${nameOf(c, id)}" out of the SyncDrop menu. The folder and its files are not touched.`);
+      if (isYes(await io.ask(`Remove "${nameOf(c, id)}" from the menu? [y/N]: `))) await apply(io, st, () => removeTarget(id), "Removed.");
+    } else if (pick === 2) {
+      heading(io, "Rename a folder");
+      const id = await pickFolder(io, c, "rename");
+      if (!id) continue;
+      const name = await askFolderName(io, `New name for "${nameOf(c, id)}" (Enter to cancel): `, "", known(c, id));
+      if (name) await apply(io, st, () => renameTarget(id, name), "Saved.");
+    } else {
+      await reorder(io, st);
     }
-    const info = await stat(dir).catch(() => undefined);
-    if (info && !info.isDirectory()) {
-      io.err(`${dir} exists but is not a folder`);
-      return c;
-    }
-    const fallback = path.basename(dir) || "Folder";
-    const name = (await io.ask(`  Name shown in the menu [${fallback}]: `)).trim() || fallback;
-    if (!info && /^y/i.test((await io.ask(`  ${dir} does not exist. Create it? [Y/n]: `)).trim() || "y")) await mkdir(dir, { recursive: true });
-    return addTarget(makeTargetId(name, c.order), name, raw);
   }
-  if (what === "Remove a folder") {
-    const n = await askNumber(io, "Remove which folder (number)? The folder on disk is not touched: ", c.order.length);
-    return n === null ? c : removeTarget(c.order[n - 1] as string);
-  }
-  if (what === "Rename a folder") {
-    const n = await askNumber(io, "Rename which folder (number)? ", c.order.length);
-    if (n === null) return c;
-    const name = (await io.ask("  New name: ")).trim();
-    return name ? renameTarget(c.order[n - 1] as string, name) : c;
-  }
-  if (what) return moveFolder(io, c);
-  return c;
 }
 
-async function managersMenu(io: CliIO, c: Config): Promise<void> {
-  const rows = await Promise.all(
-    ADAPTER_NAMES.map(async (name) => {
-      const a = createAdapter(name, adapterContext(c));
-      return { name, a, found: await a.isSupported(), installed: await a.isInstalled() };
-    }),
-  );
-  io.out("\nFile managers:");
-  rows.forEach((r, i) => io.out(`  ${i + 1}) ${r.name}: ${r.found ? "found" : "not found"}, SyncDrop menu ${r.installed ? "installed" : "not installed"}`));
-  const n = await askNumber(io, "Number to add or remove its SyncDrop menu (Enter to go back): ", rows.length);
-  if (n === null) return;
-  const r = rows[n - 1] as (typeof rows)[number];
-  const report = r.installed ? await r.a.uninstall() : await r.a.install();
-  io.out(`${r.name}: SyncDrop menu ${r.installed ? "removed" : "installed"}.`);
-  report.notes.forEach((note) => io.out(`  ${note}`));
+async function managersScreen(io: CliIO, st: State): Promise<void> {
+  for (;;) {
+    const rows = await Promise.all(
+      ADAPTER_NAMES.map(async (name) => {
+        const a = createAdapter(name, adapterContext(st.config));
+        return { name, a, found: await a.isSupported(), installed: await a.isInstalled() };
+      }),
+    );
+    heading(io, "File managers");
+    io.out("Pick one to add or remove its SyncDrop menu.");
+    io.out("");
+    const pick = await menu(
+      io,
+      rows.map((r) => ({ label: `${r.name}: ${r.found ? "" : "not found on this computer, "}menu ${r.installed ? "installed" : "not installed"}` })),
+      "Back",
+    );
+    if (pick === null) return;
+    const r = rows[pick] as (typeof rows)[number];
+    try {
+      const report = r.installed ? await r.a.uninstall() : await r.a.install();
+      io.out(`${r.name}: SyncDrop menu ${r.installed ? "removed" : "installed"}.`);
+      report.notes.forEach((note) => io.out(`  ${note}`));
+    } catch (e) {
+      io.err(`${r.name}: ${describeError(e)}`);
+    }
+  }
 }
 
 /** Interactive settings screen. Every change is saved at once; menus that are already installed are refreshed. */
 export async function runSettings(io: CliIO): Promise<number> {
   if (!io.interactive) throw new ArgsError("settings needs a terminal. Use 'syncdrop config set' and 'syncdrop target' in scripts.");
-  let config = await loadConfig();
+  const st: State = { config: await loadConfig() };
   for (;;) {
-    io.out("\nSyncDrop settings");
-    const what = await chooseFrom(io, "", ["Defaults", "Menu items and their order", "Folders (add / remove / rename)", "File managers (install / remove menu)"] as const);
-    if (!what) return EXIT.OK;
-    try {
-      if (what === "File managers (install / remove menu)") {
-        await managersMenu(io, config);
-        continue;
-      }
-      const next = await (what === "Defaults" ? defaultsMenu : what.startsWith("Menu") ? menuMenu : foldersMenu)(io, config);
-      if (next !== config) {
-        config = next;
-        io.out("Saved.");
-        await refreshMenus(config, io);
-      }
-    } catch (e) {
-      io.err(`could not do that: ${describeError(e)}`);
-      config = await loadConfig();
+    heading(io, "SyncDrop Settings");
+    const pick = await menu(
+      io,
+      [{ label: "Defaults" }, { label: "Menu order" }, { label: "Folders  (add, remove, rename, reorder)" }, { label: "File managers  (add or remove the menu)" }],
+      "Quit SyncDrop Settings",
+    );
+    if (pick === null) {
+      io.out("Settings closed. Restart your file manager to see any changes.");
+      return EXIT.OK;
     }
+    await [defaultsScreen, orderScreen, foldersScreen, managersScreen][pick]?.(io, st);
   }
 }

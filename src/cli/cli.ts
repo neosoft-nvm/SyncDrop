@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, rm, rmdir, stat } from "node:fs/promises";
+import { copyFile, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { isSea } from "node:sea";
 import readline from "node:readline";
@@ -9,6 +9,8 @@ import { CONFLICT_POLICIES, OPERATIONS, type Config, type ConflictPolicy, type O
 import { addTarget, isOperation, makeTargetId, moveTarget, removeTarget, renameTarget, setDefaults, setMenuOperations } from "../config/edit.js";
 import { menuEntries } from "../core/menu.js";
 import { adapterContext, refreshMenus } from "./menus.js";
+import { askFolderName, askFolderPath, prepareFolder, type KnownFolder } from "./folder-input.js";
+import { heading, isYes } from "./ui.js";
 import { runSettings } from "./settings.js";
 import type { ConflictResolver } from "../core/conflicts.js";
 import { ConfigError, ConflictError, EXIT, SyncDropError, ArgsError, describeError, exitCodeFor } from "../core/errors.js";
@@ -212,68 +214,45 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
       }
       io.out("SyncDrop copies files into a folder that Syncthing already syncs.");
     }
-    // Validate (and offer to create) a folder; returns true if it was created.
-    const prepare = async (raw: string): Promise<boolean> => {
-      const dir = expandPath(raw);
-      if (!path.isAbsolute(dir)) throw new ArgsError(`path must be absolute or start with ~ (got '${raw}')`);
-      const info = await stat(dir).catch(() => undefined);
-      if (info && !info.isDirectory()) throw new ArgsError(`${dir} exists but is not a folder`);
-      if (info) return false;
-      const yes = io.interactive ? /^y/i.test((await io.ask(`${dir} does not exist. Create it? [Y/n]: `)).trim() || "y") : false;
-      if (yes) {
-        await mkdir(dir, { recursive: true });
-        return true;
-      }
-      // Declined: most likely a typo, so on a terminal ask for the path again unless they really want it.
-      if (io.interactive && !/^y/i.test((await io.ask("Use that path anyway, without creating it? [y/N]: ")).trim())) {
-        throw new ArgsError(`no folder chosen for '${raw}'`);
-      }
-      io.err(`warning: ${dir} does not exist yet; create it before using SyncDrop`);
-      return false;
-    };
-    // On a terminal a bad answer is explained and asked again; only scripted use (--path) fails.
-    const askFolder = async (question: string, fallback?: string): Promise<{ raw: string; created: boolean } | null> => {
-      for (;;) {
-        const raw = (await io.ask(question)).trim() || fallback;
-        if (!raw) return null; // Enter (or end of input) with no default: give up on this folder
-        try {
-          return { raw, created: await prepare(raw) };
-        } catch (e) {
-          io.err(`${describeError(e)}. Please try again (folder paths look like ~/Documents or /home/you/Documents).`);
-        }
-      }
-    };
     let created = false;
-    if (!folder && io.interactive) {
-      const first = await askFolder("Path of that Syncthing folder [~/SyncDrop]: ", "~/SyncDrop");
-      folder = first?.raw;
-      created = first?.created ?? false;
-    } else if (folder) {
-      created = await prepare(folder);
-    }
     let mainName = "Main Sync";
     const extras: Record<string, { name: string; path: string }> = {};
+    const known: KnownFolder[] = [];
+    if (folder) {
+      // With --path the answer is not re-asked: a bad path fails the command.
+      created = await prepareFolder(io, folder);
+    } else if (io.interactive) {
+      heading(io, "Folder 1: your main folder");
+      const first = await askFolderPath(io, "Path of that Syncthing folder [~/SyncDrop]: ", known, "~/SyncDrop");
+      folder = first?.raw;
+      created = first?.created ?? false;
+    }
     if (folder && io.interactive && !p.flags.has("path")) {
+      io.out("");
       io.out("This name is what you will see in the right-click menu.");
-      mainName = path.basename(expandPath(folder)) || mainName;
-      mainName = (await io.ask(`Name for this folder, or Enter for default [${mainName}]: `)).trim() || mainName;
+      const fallback = path.basename(expandPath(folder)) || mainName;
+      mainName = (await askFolderName(io, `Name for this folder, or Enter for default [${fallback}]: `, fallback, known)) ?? fallback;
+      known.push({ name: mainName, path: folder });
       const used = new Set<string>(["main"]);
-      let more = /^y/i.test((await io.ask("Add more folders to SyncDrop? [y/N]: ")).trim());
+      io.out("");
+      let more = isYes(await io.ask("Add more folders to SyncDrop? [y/N]: "));
       while (more) {
-        const added = await askFolder("  Path of the folder (Enter to stop adding): ");
+        heading(io, `Folder ${known.length + 1}`);
+        const added = await askFolderPath(io, "Path of the folder (Enter to stop adding): ", known);
         if (!added) break;
         const raw = added.raw;
-        const name = (await io.ask(`  Name for this folder, or Enter for default [${path.basename(expandPath(raw)) || "Folder"}]: `)).trim() || path.basename(expandPath(raw)) || "Folder";
-        const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "folder";
-        let id = base;
-        for (let k = 2; used.has(id); k++) id = `${base}-${k}`;
+        const fb = path.basename(expandPath(raw)) || "Folder";
+        const name = (await askFolderName(io, `Name for this folder, or Enter for default [${fb}]: `, fb, known)) ?? fb;
+        known.push({ name, path: raw });
+        const id = makeTargetId(name, used);
         used.add(id);
         extras[id] = { name, path: raw };
         if (Object.keys(extras).length >= MAX_EXTRA_FOLDERS) {
           io.out(`That is the maximum of ${MAX_EXTRA_FOLDERS + 1} folders. To add more, edit the SyncDrop config file: ${file}`);
           break;
         }
-        more = /^y/i.test((await io.ask("Add more folders to SyncDrop? [y/N]: ")).trim());
+        io.out("");
+        more = isYes(await io.ask("Add more folders to SyncDrop? [y/N]: "));
       }
     }
     await writeDefaultConfig(file, p.flags.has("force"), folder || undefined, mainName, extras);
@@ -323,6 +302,11 @@ async function cmdTargetEdit(p: Parsed, io: CliIO): Promise<number> {
     const dir = p.flags.get("path");
     if (!name || typeof dir !== "string") throw new ArgsError("target add: usage: target add NAME --path <folder> [--id <id>]");
     if (!path.isAbsolute(expandPath(dir))) throw new ArgsError(`path must be absolute or start with ~ (got '${dir}')`);
+    const dupName = Object.values(config.targets).find((t) => t.name.trim().toLowerCase() === name.trim().toLowerCase());
+    const dupPath = Object.values(config.targets).find((t) => path.resolve(expandPath(dir)) === t.path);
+    if ((dupName || dupPath) && !p.flags.has("force")) {
+      throw new ArgsError(dupName ? `the name "${name}" is already used by target '${dupName.id}' (use --force to add it anyway)` : `that folder is already target '${(dupPath as { id: string }).id}' (use --force to add it anyway)`);
+    }
     const id = typeof p.flags.get("id") === "string" ? (p.flags.get("id") as string) : makeTargetId(name, Object.keys(config.targets));
     updated = await addTarget(id, name, dir);
     io.out(`added '${id}' ("${name}") -> ${dir}`);
@@ -430,14 +414,36 @@ async function offerRestart(names: string[], io: CliIO): Promise<void> {
 
 async function cmdSetup(p: Parsed, io: CliIO): Promise<number> {
   const file = configFilePath();
-  io.out("SyncDrop setup");
+  heading(io, "SyncDrop setup");
+  let createNew = false;
   if (await stat(file).then(() => true, () => false)) {
-    io.out(`Keeping your existing settings (${file}).`);
+    if (io.interactive) {
+      try {
+        const current = await loadConfig();
+        io.out(`You already have SyncDrop settings (${current.order.length} folder${current.order.length === 1 ? "" : "s"}):`);
+        current.order.forEach((id, i) => io.out(`  ${i + 1}. ${(current.targets[id] as { name: string }).name}   ${(current.targets[id] as { path: string }).path}`));
+      } catch (e) {
+        io.err(`Your settings file has a problem: ${describeError(e)}`);
+      }
+      io.out("");
+      io.out("  1) Keep my current settings");
+      io.out("  2) Create new settings (the current file is saved as a .bak copy first)");
+      createNew = (await io.ask("Number [1]: ")).trim() === "2";
+    }
+    if (!createNew) io.out(`Keeping your existing settings (${file}). Change them any time with: syncdrop settings`);
   } else {
-    const code = await cmdConfig({ positionals: ["config", "init"], flags: p.flags }, io);
+    createNew = true;
+  }
+  if (createNew) {
+    if (await stat(file).then(() => true, () => false)) {
+      await copyFile(file, file + ".bak");
+      io.out(`Saved your old settings as ${file}.bak`);
+    }
+    const flags = new Map(p.flags);
+    flags.set("force", true);
+    const code = await cmdConfig({ positionals: ["config", "init"], flags }, io);
     if (code !== EXIT.OK) return code;
   }
-  io.out("");
   const config = await loadConfig();
   const ctx = adapterContext(config);
   let installed = 0;

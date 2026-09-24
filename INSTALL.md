@@ -16,6 +16,7 @@ SyncDrop adds a **SyncDrop** option to your right-click menu. Pick a file or fol
    ```
 
 3. When it asks for your sync folder, type the folder's path (or press **Enter** to use `~/SyncDrop`). If the folder doesn't exist, say **Y** to create it.
+   Next it asks what **name** to show in the right-click menu for that folder (Enter keeps the suggestion, which is the folder's own name, e.g. `~/Documents` suggests "Documents"). Then it asks whether you want to add more folders: answer **y**, say how many (1 to 6), and it walks you through each one (path, then menu name).
 4. Log out and back in, or restart your file manager.
 
 Don't use `sudo`. Nothing here needs an administrator password.

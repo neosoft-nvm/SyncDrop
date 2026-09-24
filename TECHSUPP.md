@@ -55,7 +55,7 @@ Dry run without publishing: `gh workflow run release --ref <branch>` (or Actions
 
 ## Configuration
 
-Per-user, no root. `syncdrop config path` prints the location (Linux: `~/.config/syncdrop/config.json`; Windows: `%APPDATA%\syncdrop\config.json`). To add another sync folder, edit `targets` in that file, then run `syncdrop setup` (Thunar and Dolphin need the refresh; Caja and Nautilus read targets each time the menu opens). Scripts can skip the prompt: `syncdrop config init --path ~/SyncDrop`. Run as your normal user; under `sudo` the config goes to `/root`.
+Per-user, no root. `syncdrop config path` prints the location (Linux: `~/.config/syncdrop/config.json`; Windows: `%APPDATA%\syncdrop\config.json`). To add another sync folder, edit `targets` in that file, then run `syncdrop setup` (Thunar and Dolphin need the refresh; Caja and Nautilus read targets each time the menu opens). `config init` on a terminal also asks for the main target's display name and up to 6 extra targets (ids are slugs of the names, e.g. `papers`, `papers-2`). Scripts can skip the prompts: `syncdrop config init --path ~/SyncDrop`. Run as your normal user; under `sudo` the config goes to `/root`.
 
 History: `~/.local/state/syncdrop/history.jsonl`. `syncdrop uninstall` keeps config and history unless `--purge` is given (it then deletes the config file and history file, and their folders if empty). It removes the running binary only when run as the installed single-file binary. Per-adapter removal: `syncdrop integrate uninstall`.
 

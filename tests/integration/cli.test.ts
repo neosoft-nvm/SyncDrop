@@ -125,6 +125,20 @@ describe("cli", () => {
     expect((await tree(folder)).length).toBe(0);
   });
 
+  it("config init asks for a menu name and up to 6 extra folders", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const [a, b, c2] = ["Videos", "Docs", "Docs2"].map((n) => path.join(root, n));
+    const c = fakeIO({
+      interactive: true,
+      answers: [a, "y", "Movies", "y", "9", "2", b, "Papers", "y", c2, "Papers", "y"],
+    });
+    expect(await run(["config", "init"], c.io)).toBe(0);
+    const t = JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets;
+    expect(t.main.name).toBe("Movies");
+    expect(t.papers).toMatchObject({ name: "Papers", path: b });
+    expect(t["papers-2"]).toMatchObject({ name: "Papers", path: c2 });
+  });
+
   it("config init --path works without a terminal and warns if missing", async () => {
     process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
     const c = fakeIO();

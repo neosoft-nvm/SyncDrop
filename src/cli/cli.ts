@@ -283,8 +283,9 @@ async function cmdIntegrate(p: Parsed, io: CliIO): Promise<number> {
   if (action !== "install" && action !== "uninstall" && action !== "status") {
     throw new ArgsError("integrate: expected install, uninstall or status");
   }
-  const config = await loadConfig();
-  const ctx = { cli: defaultCli(), targets: Object.values(config.targets) };
+  // Removing entries must work even after the config was deleted.
+  const targets = action === "install" ? Object.values((await loadConfig()).targets) : [];
+  const ctx = { cli: defaultCli(), targets };
   const names = which === "all" ? [...ADAPTER_NAMES] : [which];
   let code: number = EXIT.OK;
   for (const name of names) {

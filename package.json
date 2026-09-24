@@ -1,6 +1,6 @@
 {
   "name": "syncdrop",
-  "version": "0.2.0-rc.1",
+  "version": "0.2.0-rc.2",
   "description": "Cross-platform file-to-sync-target utility with file-manager integrations.",
   "license": "MIT",
   "type": "module",

@@ -47,7 +47,7 @@ SYNCDROP_BINARY=release/syncdrop sh packaging/linux/install.sh
 
 ## Publishing a release
 
-Pre-releases: a tag containing `-` (e.g. `v0.2.0-rc.1`, matching `package.json`) is published as a GitHub pre-release, so it never becomes `latest`. Install it with `curl -fsSL https://github.com/neosoft-nvm/SyncDrop/releases/download/v0.2.0-rc.1/install.sh | SYNCDROP_VERSION=v0.2.0-rc.1 sh`.
+Pre-releases: a tag containing `-` (e.g. `v0.2.0-rc.2`, matching `package.json`) is published as a GitHub pre-release, so it never becomes `latest`. Install it with `curl -fsSL https://github.com/neosoft-nvm/SyncDrop/releases/download/v0.2.0-rc.2/install.sh | SYNCDROP_VERSION=v0.2.0-rc.2 sh`.
 
 Push a tag such as `v0.1.0`. `.github/workflows/release.yml` runs the tests, builds the binary with Node 24.18.0 from nodejs.org, and attaches `syncdrop-linux-x64.gz` and `install.sh` to a GitHub release. v0.1.0 was published this way; the workflow ran successfully on GitHub's runner and the `curl` one-liner was checked against the public release in a throwaway HOME.
 

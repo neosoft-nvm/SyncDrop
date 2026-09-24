@@ -125,18 +125,27 @@ describe("cli", () => {
     expect((await tree(folder)).length).toBe(0);
   });
 
-  it("config init asks for a menu name and up to 6 extra folders", async () => {
+  it("config init asks for a menu name and up to 10 extra folders", async () => {
     process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
     const [a, b, c2] = ["Videos", "Docs", "Docs2"].map((n) => path.join(root, n));
     const c = fakeIO({
       interactive: true,
-      answers: [a, "y", "Movies", "y", "9", "2", b, "Papers", "y", c2, "Papers", "y"],
+      answers: [a, "y", "Movies", "y", b, "Papers", "y", "y", c2, "Papers", "y", "n"],
     });
     expect(await run(["config", "init"], c.io)).toBe(0);
     const t = JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets;
     expect(t.main.name).toBe("Movies");
     expect(t.papers).toMatchObject({ name: "Papers", path: b });
     expect(t["papers-2"]).toMatchObject({ name: "Papers", path: c2 });
+  });
+
+  it("config init stops at 10 folders in total and points at the config file", async () => {
+    process.env.SYNCDROP_CONFIG = path.join(root, "new", "config.json");
+    const answers = [path.join(root, "F0"), "y", "F0", ...Array.from({ length: 9 }, (_, i) => ["y", path.join(root, `F${i + 1}`), `F${i + 1}`, "y"]).flat()];
+    const c = fakeIO({ interactive: true, answers });
+    expect(await run(["config", "init"], c.io)).toBe(0);
+    expect(Object.keys(JSON.parse(await read(process.env.SYNCDROP_CONFIG)).targets)).toHaveLength(10);
+    expect(c.out.join("\n")).toContain("edit the SyncDrop config file");
   });
 
   it("config init --path works without a terminal and warns if missing", async () => {

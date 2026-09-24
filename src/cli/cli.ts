@@ -1,3 +1,5 @@
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { mkdir, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { isSea } from "node:sea";
@@ -181,7 +183,7 @@ async function cmdTargets(p: Parsed, io: CliIO): Promise<number> {
   return EXIT.OK;
 }
 
-const MAX_EXTRA_FOLDERS = 6;
+const MAX_EXTRA_FOLDERS = 9;
 
 async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
   const sub = p.positionals[1];
@@ -199,7 +201,7 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
         throw new ConfigError(`${file} already exists (use --force to overwrite)`);
       }
       io.out("SyncDrop copies files into a folder that Syncthing already syncs.");
-      folder = (await io.ask("Path of that folder [~/SyncDrop]: ")).trim() || "~/SyncDrop";
+      folder = (await io.ask("Path of that Syncthing folder [~/SyncDrop]: ")).trim() || "~/SyncDrop";
     }
     // Validate (and offer to create) a folder; returns true if it was created.
     const prepare = async (raw: string): Promise<boolean> => {
@@ -224,27 +226,23 @@ async function cmdConfig(p: Parsed, io: CliIO): Promise<number> {
       io.out("This name is what you will see in the right-click menu.");
       mainName = path.basename(expandPath(folder)) || mainName;
       mainName = (await io.ask(`Name for this folder, or Enter for default [${mainName}]: `)).trim() || mainName;
-      const more = /^y/i.test((await io.ask("Add more folders to SyncDrop? [y/N]: ")).trim());
-      if (more) {
-        let count = 0;
-        while (count < 1 || count > MAX_EXTRA_FOLDERS) {
-          const n = Number((await io.ask(`How many more folders (1-${MAX_EXTRA_FOLDERS})? `)).trim());
-          count = Number.isInteger(n) ? n : 0;
-          if (count < 1 || count > MAX_EXTRA_FOLDERS) io.out(`Please enter a number from 1 to ${MAX_EXTRA_FOLDERS}.`);
+      const used = new Set<string>(["main"]);
+      let more = /^y/i.test((await io.ask("Add more folders to SyncDrop? [y/N]: ")).trim());
+      while (more) {
+        let raw = "";
+        while (!raw) raw = (await io.ask("  Path of the folder: ")).trim();
+        const name = (await io.ask(`  Name for this folder, or Enter for default [${path.basename(expandPath(raw)) || "Folder"}]: `)).trim() || path.basename(expandPath(raw)) || "Folder";
+        await prepare(raw);
+        const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "folder";
+        let id = base;
+        for (let k = 2; used.has(id); k++) id = `${base}-${k}`;
+        used.add(id);
+        extras[id] = { name, path: raw };
+        if (Object.keys(extras).length >= MAX_EXTRA_FOLDERS) {
+          io.out(`That is the maximum of ${MAX_EXTRA_FOLDERS + 1} folders. To add more, edit the SyncDrop config file: ${file}`);
+          break;
         }
-        const used = new Set<string>(["main"]);
-        for (let i = 1; i <= count; i++) {
-          io.out(`Folder ${i} of ${count}`);
-          let raw = "";
-          while (!raw) raw = (await io.ask("  Path of the folder: ")).trim();
-          const name = (await io.ask(`  Name for this folder, or Enter for default [${path.basename(expandPath(raw)) || "Folder"}]: `)).trim() || path.basename(expandPath(raw)) || "Folder";
-          await prepare(raw);
-          const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "folder";
-          let id = base;
-          for (let k = 2; used.has(id); k++) id = `${base}-${k}`;
-          used.add(id);
-          extras[id] = { name, path: raw };
-        }
+        more = /^y/i.test((await io.ask("Add more folders to SyncDrop? [y/N]: ")).trim());
       }
     }
     await writeDefaultConfig(file, p.flags.has("force"), folder || undefined, mainName, extras);
@@ -312,6 +310,32 @@ async function cmdIntegrate(p: Parsed, io: CliIO): Promise<number> {
   return code;
 }
 
+const execP = promisify(execFile);
+
+// Names of the given file managers that are currently running.
+async function runningManagers(names: string[]): Promise<string[]> {
+  const found: string[] = [];
+  for (const n of names) if (await execP("pgrep", ["-x", n]).then(() => true, () => false)) found.push(n);
+  return found;
+}
+
+async function offerRestart(names: string[], io: CliIO): Promise<void> {
+  const running = await runningManagers(names);
+  if (running.length === 0) return;
+  io.out(`Running now: ${running.join(", ")}. Windows open in them will close.`);
+  const a = (await io.ask("[R]estart them for me, [Q]uit them and I'll reopen them myself, or Enter to do nothing: ")).trim().toLowerCase();
+  if (a !== "r" && a !== "q") return;
+  for (const n of running) {
+    await execP("pkill", ["-x", n]).catch(() => undefined);
+    if (a === "r") {
+      // Give the old process a moment to exit, then start a detached copy.
+      await new Promise((r) => setTimeout(r, 800));
+      spawn(n, [], { detached: true, stdio: "ignore" }).on("error", () => io.err(`could not start ${n}; open it yourself`)).unref();
+    }
+  }
+  io.out(a === "r" ? "Restarted." : "Closed. Open your file manager again when you are ready.");
+}
+
 async function cmdSetup(p: Parsed, io: CliIO): Promise<number> {
   const file = configFilePath();
   io.out("SyncDrop setup");
@@ -325,6 +349,7 @@ async function cmdSetup(p: Parsed, io: CliIO): Promise<number> {
   const config = await loadConfig();
   const ctx = { cli: defaultCli(), targets: Object.values(config.targets) };
   let installed = 0;
+  const installedNames: string[] = [];
   let code: number = EXIT.OK;
   for (const name of ADAPTER_NAMES) {
     const adapter = createAdapter(name, ctx);
@@ -332,6 +357,7 @@ async function cmdSetup(p: Parsed, io: CliIO): Promise<number> {
     try {
       const report = await adapter.install();
       installed++;
+      installedNames.push(name);
       io.out(`Added the SyncDrop menu to ${name}.`);
       report.notes.forEach((n) => io.out(`  ${n}`));
     } catch (e) {
@@ -344,6 +370,7 @@ async function cmdSetup(p: Parsed, io: CliIO): Promise<number> {
   } else if (installed > 0) {
     io.out("");
     io.out("Almost done: restart your file manager (or log out and back in), then right-click a file and choose SyncDrop.");
+    if (io.interactive) await offerRestart(installedNames, io);
   }
   if (isSea()) {
     const dir = path.dirname(process.execPath);
